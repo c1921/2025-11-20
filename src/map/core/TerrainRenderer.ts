@@ -10,16 +10,18 @@ export class TerrainRenderer {
    * 带有高度阈值的地形颜色定义
    */
   private static readonly TERRAIN_COLORS: Record<string, TerrainType> = {
-    deepOcean: { r: 25, g: 45, b: 95, threshold: 0.0 },
-    ocean: { r: 44, g: 76, b: 130, threshold: 0.25 }, // 降低海洋阈值
-    shallowOcean: { r: 60, g: 95, b: 150, threshold: 0.32 }, // 降低浅海阈值
-    beach: { r: 210, g: 190, b: 130, threshold: 0.35 }, // 降低海滩阈值（海陆分界线）
-    plains: { r: 85, g: 140, b: 55, threshold: 0.42 },
-    grassland: { r: 95, g: 150, b: 65, threshold: 0.52 },
-    hills: { r: 100, g: 125, b: 75, threshold: 0.65 },
-    highlands: { r: 115, g: 110, b: 90, threshold: 0.75 },
-    mountains: { r: 135, g: 125, b: 115, threshold: 0.85 },
-    peaks: { r: 200, g: 200, b: 210, threshold: 0.95 },
+    deepOcean: { r: 8, g: 20, b: 65, threshold: 0.0 },          // 深海
+    ocean: { r: 17, g: 46, b: 110, threshold: 0.12 },           // 海洋
+    mediumOcean: { r: 34, g: 78, b: 138, threshold: 0.349 },     // 中层海洋
+    shallowOcean: { r: 52, g: 112, b: 64, threshold: 0.35 },    // 浅海/海岸（海陆分界线）
+    lowlands: { r: 66, g: 131, b: 62, threshold: 0.40 },        // 低地
+    plains: { r: 122, g: 154, b: 60, threshold: 0.48 },         // 平原
+    grassland: { r: 213, g: 191, b: 101, threshold: 0.61 },     // 草地/高原
+    hills: { r: 210, g: 143, b: 65, threshold: 0.71 },          // 丘陵
+    highlands: { r: 147, g: 72, b: 33, threshold: 0.90 },       // 高地/山麓
+    mountains: { r: 128, g: 128, b: 128, threshold: 0.95 },     // 山脉
+    snowPeaks: { r: 210, g: 210, b: 210, threshold: 0.98 },     // 雪峰
+    highPeaks: { r: 240, g: 240, b: 240, threshold: 1.0 },      // 最高峰
   };
 
   /**
@@ -36,7 +38,7 @@ export class TerrainRenderer {
     heightmap: Float32Array,
     width: number,
     height: number,
-    useInterpolation: boolean = true
+    useInterpolation: boolean = false
   ): PIXI.Texture {
     // 创建用于像素操作的离屏画布
     const canvas = document.createElement('canvas');

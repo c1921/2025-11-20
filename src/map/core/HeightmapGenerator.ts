@@ -54,7 +54,8 @@ export class HeightmapGenerator {
       }
     }
 
-    return data;
+    // 应用对比度增强以拉开高低差距
+    return this.enhanceContrast(data);
   }
 
   /**
@@ -105,12 +106,64 @@ export class HeightmapGenerator {
 
     // 径向渐变衰减
     // 乘数控制岛屿大小（越高 = 越小的岛屿）
-    const falloffMultiplier = 1.4; // 减小值以创建更大的陆地
+    const falloffMultiplier = 1.0; // 减小值以创建更大的陆地
     const mask = Math.max(0, 1 - distanceFromCenter * falloffMultiplier);
 
-    // 应用幂曲线以获得更平滑的海岸线
-    // 更高的指数 = 更锐利的海岸线
-    return Math.pow(mask, 1.2); // 减小指数以获得更柔和的海岸线
+    // 应用幂函数调整陆地面积
+    // 指数越高 = 陆地面积越小
+    // 1.2 是一个经验值，可以根据需要进行调整
+    return Math.pow(mask, 1.2);
+  }
+
+  /**
+   * 增强高度图的对比度
+   * 保持平原以下(0-0.48)不变,只拉伸平原以上(0.48-1.0)的高度
+   */
+  private enhanceContrast(data: Float32Array): Float32Array {
+    // 平原阈值,与 TerrainRenderer 的 plains threshold 对应
+    const plainsThreshold = 0.48;
+
+    // 找到平原以上区域的最小值和最大值
+    let minAbovePlains = Infinity;
+    let maxAbovePlains = -Infinity;
+
+    for (let i = 0; i < data.length; i++) {
+      const value = data[i]!;
+      if (value > plainsThreshold) {
+        if (value < minAbovePlains) minAbovePlains = value;
+        if (value > maxAbovePlains) maxAbovePlains = value;
+      }
+    }
+
+    // 如果没有平原以上的区域,或范围太小,直接返回
+    if (minAbovePlains === Infinity || maxAbovePlains - minAbovePlains < 0.001) {
+      return data;
+    }
+
+    // 对平原以上区域进行直方图拉伸
+    const range = maxAbovePlains - minAbovePlains;
+    const enhanced = new Float32Array(data.length);
+
+    for (let i = 0; i < data.length; i++) {
+      const value = data[i]!;
+
+      if (value <= plainsThreshold) {
+        // 平原以下保持不变
+        enhanced[i] = value;
+      } else {
+        // 平原以上: 将 [minAbovePlains, maxAbovePlains] 映射到 [plainsThreshold, 1.0]
+        const normalized = (value - minAbovePlains) / range;
+
+        // 应用 S 曲线增强山地对比度
+        // 使用 smoothstep 函数: 3x² - 2x³
+        const contrast = normalized * normalized * (3 - 2 * normalized);
+
+        // 映射到 [plainsThreshold, 1.0] 范围
+        enhanced[i] = plainsThreshold + contrast * (1.0 - plainsThreshold);
+      }
+    }
+
+    return enhanced;
   }
 
   /**
@@ -148,7 +201,8 @@ export class HeightmapGenerator {
       }
     }
 
-    return data;
+    // 应用对比度增强以拉开高低差距
+    return this.enhanceContrast(data);
   }
 
   /**
