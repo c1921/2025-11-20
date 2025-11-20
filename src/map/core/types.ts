@@ -21,6 +21,38 @@ export interface TerrainType {
 }
 
 /**
+ * 基于流积累的侵蚀配置
+ */
+export interface FlowErosionConfig {
+  /** 是否启用侵蚀（默认：true） */
+  enabled?: boolean;
+
+  /** 是否在控制台输出侵蚀调试信息（默认：false） */
+  logDebug?: boolean;
+
+  /** 侵蚀迭代次数（默认：1，增加可叠加侵蚀效果） */
+  erosionIterations?: number;
+
+  /** 每个格子的基础降水量（默认：1.0） */
+  rainfall?: number;
+
+  /** 侵蚀强度系数（默认：0.0005） */
+  strength?: number;
+
+  /** 流量的指数缩放，抑制过大河流（默认：0.45） */
+  flowExponent?: number;
+
+  /** 忽略过于平缓的坡度（默认：0.0001） */
+  minSlope?: number;
+
+  /** 侵蚀后平滑迭代次数（默认：1） */
+  smoothingIterations?: number;
+
+  /** 平滑混合因子，0-1 越大越接近邻域平均（默认：0.45） */
+  smoothingBlend?: number;
+}
+
+/**
  * 高度图生成配置
  */
 export interface HeightmapConfig {
@@ -44,6 +76,9 @@ export interface HeightmapConfig {
 
   /** 应用岛屿遮罩以创建大陆形状（默认：true） */
   applyIslandMask?: boolean;
+
+  /** 基于流向和流量的侵蚀参数 */
+  erosion?: FlowErosionConfig;
 }
 
 /**

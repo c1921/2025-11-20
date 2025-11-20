@@ -128,6 +128,13 @@ export class MapGenerator {
       persistence: 0.5,
       lacunarity: 2.0,
       applyIslandMask: true,
+      erosion: {
+        logDebug: true, // 输出侵蚀统计，便于观察效果
+        erosionIterations: 30, // 多步叠加侵蚀
+        strength: 0.0015, // 单步强度稍降，多轮叠加
+        flowExponent: 0.8, // 提高大河刻蚀能力
+        smoothingIterations: 0, // 先观察裸侵蚀效果
+      },
     });
 
     // 使用域扭曲生成更有机的地形

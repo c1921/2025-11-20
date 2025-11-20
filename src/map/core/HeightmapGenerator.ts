@@ -1,5 +1,9 @@
 import { makeNoise2D } from 'open-simplex-noise';
-import type { HeightmapConfig } from './types';
+import type { FlowErosionConfig, HeightmapConfig } from './types';
+
+type InternalHeightmapConfig = Omit<Required<HeightmapConfig>, 'erosion'> & {
+  erosion: Required<FlowErosionConfig>;
+};
 
 /**
  * 使用多八度 simplex 噪声生成高度图
@@ -7,11 +11,23 @@ import type { HeightmapConfig } from './types';
  */
 export class HeightmapGenerator {
   private noise2D: ReturnType<typeof makeNoise2D>;
-  private config: Required<HeightmapConfig>;
+  private config: InternalHeightmapConfig;
 
   constructor(config: HeightmapConfig) {
     // 使用种子初始化噪声生成器
     this.noise2D = makeNoise2D(config.seed);
+
+    const erosionConfig: Required<FlowErosionConfig> = {
+      enabled: config.erosion?.enabled ?? true,
+      logDebug: config.erosion?.logDebug ?? false,
+      erosionIterations: Math.max(1, Math.floor(config.erosion?.erosionIterations ?? 1)),
+      rainfall: config.erosion?.rainfall ?? 1.0,
+      strength: config.erosion?.strength ?? 0.0005,
+      flowExponent: config.erosion?.flowExponent ?? 0.45,
+      minSlope: config.erosion?.minSlope ?? 0.0001,
+      smoothingIterations: config.erosion?.smoothingIterations ?? 1,
+      smoothingBlend: config.erosion?.smoothingBlend ?? 0.45,
+    };
 
     // 为可选参数设置默认值
     this.config = {
@@ -22,6 +38,7 @@ export class HeightmapGenerator {
       persistence: config.persistence ?? 0.5,
       lacunarity: config.lacunarity ?? 2.0,
       applyIslandMask: config.applyIslandMask ?? true,
+      erosion: erosionConfig,
     };
   }
 
@@ -54,8 +71,7 @@ export class HeightmapGenerator {
       }
     }
 
-    // 应用对比度增强以拉开高低差距
-    return this.enhanceContrast(data);
+    return this.finalizeHeightmap(data);
   }
 
   /**
@@ -167,6 +183,229 @@ export class HeightmapGenerator {
   }
 
   /**
+   * 应用侵蚀和对比度等后处理
+   */
+  private finalizeHeightmap(heightmap: Float32Array): Float32Array {
+    const iterations = this.config.erosion.erosionIterations;
+    let current = heightmap;
+
+    for (let i = 0; i < iterations; i++) {
+      current = this.applyFlowBasedErosion(current, i);
+    }
+
+    return this.enhanceContrast(current);
+  }
+
+  /**
+   * 基于流向/流量的简单水蚀：
+   * 1) 计算 D8 流向和坡度
+   * 2) 按高度排序累积降水得到流量
+   * 3) 侵蚀量 ~ flow^exp * slope
+   * 4) 简单平滑模拟沉积
+   */
+  private applyFlowBasedErosion(heightmap: Float32Array, iteration: number): Float32Array {
+    const { width, height, erosion } = this.config;
+    if (!erosion.enabled) {
+      return heightmap;
+    }
+
+    const size = width * height;
+    const flowDirection = new Int32Array(size);
+    const slopes = new Float32Array(size);
+    flowDirection.fill(-1);
+
+    // Step 1: D8 流向和坡度（最陡的邻居）
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const idx = y * width + x;
+        const currentHeight = heightmap[idx] ?? 0;
+
+        let bestSlope = 0;
+        let bestIndex = -1;
+
+        for (let offsetY = -1; offsetY <= 1; offsetY++) {
+          for (let offsetX = -1; offsetX <= 1; offsetX++) {
+            if (offsetX === 0 && offsetY === 0) continue;
+
+            const nx = x + offsetX;
+            const ny = y + offsetY;
+            if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
+
+            const neighborIndex = ny * width + nx;
+            const neighborHeight = heightmap[neighborIndex] ?? currentHeight;
+            const drop = currentHeight - neighborHeight;
+            if (drop <= 0) continue;
+
+            const distance = offsetX === 0 || offsetY === 0 ? 1 : Math.SQRT2;
+            const slope = drop / distance;
+
+            if (slope > bestSlope) {
+              bestSlope = slope;
+              bestIndex = neighborIndex;
+            }
+          }
+        }
+
+        flowDirection[idx] = bestIndex;
+        slopes[idx] = bestSlope;
+      }
+    }
+
+    // Step 2: 高到低累积流量
+    const order = new Uint32Array(size);
+    for (let i = 0; i < size; i++) {
+      order[i] = i;
+    }
+    order.sort((a, b) => {
+      const hb = heightmap[b] ?? 0;
+      const ha = heightmap[a] ?? 0;
+      return hb - ha;
+    });
+
+    const flow = new Float32Array(size);
+    flow.fill(erosion.rainfall);
+
+    for (let i = 0; i < size; i++) {
+      const idx = order[i] ?? 0;
+      const target = flowDirection[idx] ?? -1;
+      if (target >= 0) {
+        flow[target] = (flow[target] ?? 0) + (flow[idx] ?? 0);
+      }
+    }
+
+    // Step 3: 基于流量和坡度的侵蚀
+    const eroded = new Float32Array(size);
+    let minErosion = Infinity;
+    let maxErosion = 0;
+    let totalErosion = 0;
+    for (let i = 0; i < size; i++) {
+      const slope = slopes[i] ?? 0;
+      const flowAmount = flow[i] ?? 0;
+
+      let erosionAmount = 0;
+      if (slope > erosion.minSlope) {
+        erosionAmount =
+          erosion.strength *
+          Math.pow(flowAmount, erosion.flowExponent) *
+          slope;
+      }
+
+      const baseHeight = heightmap[i] ?? 0;
+      const newHeight = baseHeight - erosionAmount;
+      eroded[i] = Math.max(0, Math.min(1, newHeight));
+
+      minErosion = Math.min(minErosion, erosionAmount);
+      maxErosion = Math.max(maxErosion, erosionAmount);
+      totalErosion += erosionAmount;
+    }
+
+    // Step 4: 简单平滑，模拟沉积/搬运
+    const result =
+      erosion.smoothingIterations <= 0 || erosion.smoothingBlend <= 0
+        ? eroded
+        : this.smoothHeightmap(eroded, erosion.smoothingIterations, erosion.smoothingBlend);
+
+    this.logErosionSummary(erosion, {
+      minErosion,
+      maxErosion,
+      totalErosion,
+      maxFlow: this.findMaxFlow(flow),
+    }, iteration);
+
+    return result;
+  }
+
+  private logErosionSummary(
+    erosion: FlowErosionConfig,
+    stats: { minErosion: number; maxErosion: number; totalErosion: number; maxFlow: number },
+    iteration: number
+  ): void {
+    if (!erosion.logDebug) return;
+
+    const { minErosion, maxErosion, totalErosion, maxFlow } = stats;
+    const totalCells = this.config.width * this.config.height;
+    const avgErosion = totalErosion / Math.max(1, totalCells);
+
+    console.log(
+      '[Erosion] 完成流向/流量侵蚀',
+      {
+        iteration,
+        rainfall: erosion.rainfall,
+        strength: erosion.strength,
+        flowExponent: erosion.flowExponent,
+        minSlope: erosion.minSlope,
+        smoothingIterations: erosion.smoothingIterations,
+        smoothingBlend: erosion.smoothingBlend,
+      }
+    );
+    console.log(
+      '[Erosion] 统计',
+      {
+        iteration,
+        minErosion: Number(minErosion.toFixed(6)),
+        maxErosion: Number(maxErosion.toFixed(6)),
+        avgErosion: Number(avgErosion.toFixed(6)),
+        maxFlow: Number(maxFlow.toFixed(2)),
+      }
+    );
+  }
+
+  private findMaxFlow(flow: Float32Array): number {
+    let max = 0;
+    for (let i = 0; i < flow.length; i++) {
+      const value = flow[i] ?? 0;
+      if (value > max) {
+        max = value;
+      }
+    }
+    return max;
+  }
+
+  /**
+   * 邻域平均的平滑，避免侵蚀产生的尖锐噪声
+   */
+  private smoothHeightmap(heightmap: Float32Array, iterations: number, blend: number): Float32Array {
+    const { width, height } = this.config;
+    const clampedBlend = Math.max(0, Math.min(1, blend));
+
+    let current: Float32Array = heightmap;
+
+    for (let iter = 0; iter < iterations; iter++) {
+      const next = new Float32Array(current.length);
+
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const idx = y * width + x;
+
+          let sum = current[idx] ?? 0;
+          let count = 1;
+
+          for (let offsetY = -1; offsetY <= 1; offsetY++) {
+            for (let offsetX = -1; offsetX <= 1; offsetX++) {
+              if (offsetX === 0 && offsetY === 0) continue;
+
+              const nx = x + offsetX;
+              const ny = y + offsetY;
+              if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
+
+              sum += current[ny * width + nx] ?? 0;
+              count++;
+            }
+          }
+
+          const average = sum / count;
+          const blended = (current[idx] ?? 0) * (1 - clampedBlend) + average * clampedBlend;
+          next[idx] = Math.max(0, Math.min(1, blended));
+        }
+      }
+
+      current = next;
+    }
+
+    return current;
+  }
+
+  /**
    * 使用自定义噪声函数生成具有域扭曲的高度图
    * 这将创建更有机、扭曲的地形特征
    */
@@ -201,8 +440,7 @@ export class HeightmapGenerator {
       }
     }
 
-    // 应用对比度增强以拉开高低差距
-    return this.enhanceContrast(data);
+    return this.finalizeHeightmap(data);
   }
 
   /**
