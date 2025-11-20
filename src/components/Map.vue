@@ -4,6 +4,7 @@ import { MapGenerator } from '../map/MapGenerator';
 
 const mapContainer = ref<HTMLDivElement | null>(null);
 const isGenerating = ref(false);
+const isHeightmapMode = ref(false);
 let mapGenerator: MapGenerator | null = null;
 
 const generateMap = async () => {
@@ -31,11 +32,21 @@ const generateMap = async () => {
       useShading: true,
     });
 
+    // Reset view mode
+    isHeightmapMode.value = false;
+
     console.log('✨ Map generation complete!');
     console.log('💡 Try dragging/zooming the map');
   } finally {
     isGenerating.value = false;
   }
+};
+
+const toggleViewMode = () => {
+  if (!mapGenerator) return;
+
+  mapGenerator.toggleViewMode();
+  isHeightmapMode.value = mapGenerator.isHeightmapMode();
 };
 
 onMounted(async () => {
@@ -67,13 +78,24 @@ if (typeof window !== 'undefined') {
       <div class="control-panel">
         <h2>地图生成器</h2>
         <p class="hint">🖱️ 拖动平移 • 滚轮缩放</p>
-        <button
-          class="generate-btn"
-          @click="generateMap"
-          :disabled="isGenerating"
-        >
-          {{ isGenerating ? '生成中...' : '🎲 随机生成' }}
-        </button>
+
+        <div class="button-group">
+          <button
+            class="generate-btn"
+            @click="generateMap"
+            :disabled="isGenerating"
+          >
+            {{ isGenerating ? '生成中...' : '🎲 随机生成' }}
+          </button>
+
+          <button
+            class="toggle-btn"
+            @click="toggleViewMode"
+            :disabled="isGenerating"
+          >
+            {{ isHeightmapMode ? '🎨 彩色地图' : '📊 高度图' }}
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -131,10 +153,16 @@ if (typeof window !== 'undefined') {
   line-height: 1.4;
 }
 
-.generate-btn {
+.button-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.generate-btn,
+.toggle-btn {
   width: 100%;
   padding: 10px 16px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   border: none;
   border-radius: 6px;
   color: #fff;
@@ -142,6 +170,10 @@ if (typeof window !== 'undefined') {
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
+}
+
+.generate-btn {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
 }
 
@@ -150,11 +182,23 @@ if (typeof window !== 'undefined') {
   box-shadow: 0 4px 12px rgba(102, 126, 234, 0.5);
 }
 
-.generate-btn:active:not(:disabled) {
+.toggle-btn {
+  background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+  box-shadow: 0 2px 8px rgba(17, 153, 142, 0.3);
+}
+
+.toggle-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(17, 153, 142, 0.5);
+}
+
+.generate-btn:active:not(:disabled),
+.toggle-btn:active:not(:disabled) {
   transform: translateY(0);
 }
 
-.generate-btn:disabled {
+.generate-btn:disabled,
+.toggle-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
   background: linear-gradient(135deg, #555 0%, #666 100%);

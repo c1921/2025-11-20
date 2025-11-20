@@ -37,6 +37,10 @@ export class MapGenerator {
   private mapData: MapData | null = null;
   private config!: Required<MapGeneratorConfig>;
 
+  private isShowingHeightmap: boolean = false;
+  private coloredTexture: PIXI.Texture | null = null;
+  private heightmapTexture: PIXI.Texture | null = null;
+
   /**
    * 初始化并生成地图
    *
@@ -64,6 +68,10 @@ export class MapGenerator {
     // 步骤 3：将高度图转换为纹理
     console.log('🎨 正在渲染地形纹理...');
     const terrainTexture = this.createTerrainTexture(heightmap);
+
+    // 生成高度图灰度纹理
+    this.heightmapTexture = this.createGrayscaleHeightmapTexture(heightmap);
+    this.coloredTexture = terrainTexture;
 
     // 存储地图数据
     this.mapData = {
@@ -146,6 +154,35 @@ export class MapGenerator {
     }
   }
 
+  /**
+   * 创建灰度高度图纹理（用于调试和可视化）
+   */
+  private createGrayscaleHeightmapTexture(heightmap: Float32Array): PIXI.Texture {
+    const canvas = document.createElement('canvas');
+    canvas.width = this.config.width;
+    canvas.height = this.config.height;
+    const ctx = canvas.getContext('2d')!;
+
+    const imageData = ctx.createImageData(this.config.width, this.config.height);
+    const pixels = imageData.data;
+
+    for (let i = 0; i < heightmap.length; i++) {
+      const height = heightmap[i] ?? 0;
+      const gray = Math.floor(height * 255);
+      const pixelIdx = i * 4;
+      pixels[pixelIdx + 0] = gray;
+      pixels[pixelIdx + 1] = gray;
+      pixels[pixelIdx + 2] = gray;
+      pixels[pixelIdx + 3] = 255;
+    }
+
+    ctx.putImageData(imageData, 0, 0);
+
+    const texture = PIXI.Texture.from(canvas);
+    texture.source.scaleMode = 'linear';
+    return texture;
+  }
+
 
   /**
    * 设置平移和缩放的视口
@@ -195,6 +232,10 @@ export class MapGenerator {
     const heightmap = this.generateHeightmap();
     const terrainTexture = this.createTerrainTexture(heightmap);
 
+    // 生成高度图灰度纹理
+    this.heightmapTexture = this.createGrayscaleHeightmapTexture(heightmap);
+    this.coloredTexture = terrainTexture;
+
     // 更新地图数据
     this.mapData = {
       heightmap,
@@ -206,8 +247,11 @@ export class MapGenerator {
     // 销毁旧层
     this.terrainLayer.destroy();
 
+    // 根据当前模式选择纹理
+    const textureToUse = this.isShowingHeightmap ? this.heightmapTexture : this.coloredTexture;
+
     // 创建新层
-    this.createRenderLayers(terrainTexture);
+    this.createRenderLayers(textureToUse);
 
     console.log('✅ 地图已使用种子重新生成:', this.config.seed);
   }
@@ -243,6 +287,34 @@ export class MapGenerator {
   }
 
   /**
+   * 切换显示模式：灰度高度图 <-> 彩色地形图
+   */
+  toggleViewMode(): void {
+    if (!this.coloredTexture || !this.heightmapTexture) {
+      console.warn('纹理未初始化');
+      return;
+    }
+
+    this.isShowingHeightmap = !this.isShowingHeightmap;
+
+    // 获取当前要显示的纹理
+    const newTexture = this.isShowingHeightmap ? this.heightmapTexture : this.coloredTexture;
+
+    // 更新地形层的纹理
+    const sprite = this.terrainLayer.getSprite();
+    sprite.texture = newTexture;
+
+    console.log(`📊 切换到${this.isShowingHeightmap ? '高度图' : '彩色地图'}模式`);
+  }
+
+  /**
+   * 获取当前显示模式
+   */
+  isHeightmapMode(): boolean {
+    return this.isShowingHeightmap;
+  }
+
+  /**
    * 销毁地图并清理所有资源
    */
   destroy(): void {
@@ -256,5 +328,7 @@ export class MapGenerator {
     }
 
     this.mapData = null;
+    this.coloredTexture = null;
+    this.heightmapTexture = null;
   }
 }
