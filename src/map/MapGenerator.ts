@@ -156,27 +156,11 @@ export class MapGenerator {
 
   /**
    * 创建灰度高度图纹理（用于调试和可视化）
+   * 复用 HeightmapGenerator 的调试预览功能
    */
   private createGrayscaleHeightmapTexture(heightmap: Float32Array): PIXI.Texture {
-    const canvas = document.createElement('canvas');
-    canvas.width = this.config.width;
-    canvas.height = this.config.height;
-    const ctx = canvas.getContext('2d')!;
-
-    const imageData = ctx.createImageData(this.config.width, this.config.height);
-    const pixels = imageData.data;
-
-    for (let i = 0; i < heightmap.length; i++) {
-      const height = heightmap[i] ?? 0;
-      const gray = Math.floor(height * 255);
-      const pixelIdx = i * 4;
-      pixels[pixelIdx + 0] = gray;
-      pixels[pixelIdx + 1] = gray;
-      pixels[pixelIdx + 2] = gray;
-      pixels[pixelIdx + 3] = 255;
-    }
-
-    ctx.putImageData(imageData, 0, 0);
+    // 使用 HeightmapGenerator 的静态方法生成灰度预览
+    const canvas = HeightmapGenerator.createDebugPreview(heightmap, this.config.width, this.config.height);
 
     const texture = PIXI.Texture.from(canvas);
     texture.source.scaleMode = 'linear';
