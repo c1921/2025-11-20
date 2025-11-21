@@ -8,6 +8,9 @@ import { MapViewport } from './render/MapViewport';
 import { SettlementLayer } from './render/SettlementLayer';
 import { RoadLayer } from './render/RoadLayer';
 import { SettlementClassifier } from './core/SettlementClassifier';
+import { PlayerLayer } from './render/PlayerLayer';
+import { RoadPathfinder } from './core/RoadPathfinder';
+import type { RoadGraph } from './core/RoadPathfinder';
 import type { MapData, Settlement, RoadSegment } from './core/types';
 
 /**
@@ -43,6 +46,7 @@ export class MapGenerator {
   private terrainLayer!: TerrainLayer;
   private settlementLayer: SettlementLayer | null = null;
   private roadLayer: RoadLayer | null = null;
+  private playerLayer: PlayerLayer | null = null;
 
   private mapData: MapData | null = null;
   private config!: Required<MapGeneratorConfig>;
@@ -50,6 +54,9 @@ export class MapGenerator {
   private isShowingHeightmap: boolean = false;
   private coloredTexture: PIXI.Texture | null = null;
   private heightmapTexture: PIXI.Texture | null = null;
+  private roadGraph: RoadGraph | null = null;
+  private currentSettlementIndex: number | null = null;
+  private mapTapHandler: ((event: PIXI.FederatedPointerEvent) => void) | null = null;
 
   /**
    * 初始化并生成地图
@@ -104,6 +111,9 @@ export class MapGenerator {
     // 步骤 5：创建渲染层
     console.log('🖼️ 正在创建渲染层...');
     this.createRenderLayers(terrainTexture, settlements, roads);
+
+    // 步骤 5.5：配置玩家标记与交互
+    this.setupNavigation(settlements, roads);
 
     // 步骤 6：处理窗口大小调整
     this.setupResizeHandler();
@@ -285,6 +295,159 @@ export class MapGenerator {
   }
 
   /**
+   * 配置玩家标记、路网图以及点击交互
+   */
+  private setupNavigation(settlements: Settlement[], roads: RoadSegment[]): void {
+    if (!this.viewport) return;
+
+    this.detachPointerHandler();
+    this.roadGraph = RoadPathfinder.buildGraph(roads, settlements.length);
+
+    this.playerLayer?.destroy();
+    this.playerLayer = new PlayerLayer(this.app);
+    this.playerLayer.addToContainer(this.viewport.viewport);
+    this.currentSettlementIndex = null;
+
+    const spawnIdx = this.pickSpawnSettlementIndex(settlements);
+    if (spawnIdx !== null) {
+      const spawn = settlements[spawnIdx];
+      if (spawn) {
+        this.playerLayer.setPosition(spawn.x, spawn.y);
+        this.currentSettlementIndex = spawnIdx;
+        this.viewport.moveTo(spawn.x, spawn.y, false);
+      }
+    }
+
+    this.attachPointerHandler();
+  }
+
+  /**
+   * 选择一个靠近中心且分数较高的定居点作为初始出生点
+   */
+  private pickSpawnSettlementIndex(settlements: Settlement[]): number | null {
+    if (!settlements.length) return null;
+    const cx = this.config.width * 0.5;
+    const cy = this.config.height * 0.5;
+    const maxDist = Math.max(1, Math.hypot(this.config.width, this.config.height));
+
+    let best: { idx: number; score: number } | null = null;
+    for (let i = 0; i < settlements.length; i++) {
+      const s = settlements[i];
+      if (!s) continue;
+      const dist = Math.hypot(s.x - cx, s.y - cy);
+      const distPenalty = (dist / maxDist) * 0.4;
+      const categoryBoost =
+        s.category === 'city' ? 0.6 : s.category === 'town' ? 0.3 : 0;
+      const suitability = s.cityScore ?? s.suitability ?? 0;
+      const score = suitability + categoryBoost - distPenalty;
+      if (!best || score > best.score) {
+        best = { idx: i, score };
+      }
+    }
+    return best?.idx ?? null;
+  }
+
+  private findNearestSettlement(
+    x: number,
+    y: number,
+    settlements: Settlement[],
+  ): { index: number; settlement: Settlement; distance: number } | null {
+    if (!settlements.length) return null;
+    let bestIdx = -1;
+    let bestDist = Number.POSITIVE_INFINITY;
+    for (let i = 0; i < settlements.length; i++) {
+      const s = settlements[i];
+      if (!s) continue;
+      const dx = s.x - x;
+      const dy = s.y - y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestIdx = i;
+      }
+    }
+    if (bestIdx === -1) return null;
+    return { index: bestIdx, settlement: settlements[bestIdx]!, distance: bestDist };
+  }
+
+  private findNearestSettlementIndex(
+    x: number,
+    y: number,
+    settlements: Settlement[]
+  ): number | null {
+    const result = this.findNearestSettlement(x, y, settlements);
+    return result ? result.index : null;
+  }
+
+  private attachPointerHandler(): void {
+    if (!this.viewport?.viewport) return;
+    this.mapTapHandler = (event: PIXI.FederatedPointerEvent) => this.handleMapTap(event);
+    this.viewport.viewport.on('pointertap', this.mapTapHandler);
+  }
+
+  private detachPointerHandler(): void {
+    if (this.mapTapHandler && this.viewport?.viewport) {
+      this.viewport.viewport.off('pointertap', this.mapTapHandler);
+    }
+    this.mapTapHandler = null;
+  }
+
+  private handleMapTap(event: PIXI.FederatedPointerEvent): void {
+    if (!this.mapData || !this.playerLayer || !this.roadGraph) return;
+
+    const world = this.viewport.screenToWorld(event.global.x, event.global.y);
+    const target = this.findNearestSettlement(world.x, world.y, this.mapData.settlements);
+    if (!target) return;
+
+    const playerPos = this.playerLayer.getPosition();
+    if (this.currentSettlementIndex === target.index && this.isSamePoint(playerPos, target.settlement)) {
+      return; // 已在目标点附近
+    }
+    const startIdx = this.findNearestSettlementIndex(
+      playerPos.x,
+      playerPos.y,
+      this.mapData.settlements
+    );
+
+    if (startIdx === null) return;
+
+    const route = RoadPathfinder.shortestPath(startIdx, target.index, this.roadGraph);
+    if (!route) {
+      console.warn('未找到可通行的道路路径');
+      return;
+    }
+
+    const path = RoadPathfinder.buildPointPath(
+      route.nodes,
+      this.mapData.roads,
+      this.roadGraph,
+      this.mapData.settlements
+    );
+
+    if (!path || !path.length) {
+      console.warn('无法构建移动路径');
+      return;
+    }
+
+    if (!this.isSamePoint(playerPos, path[0]!)) {
+      path.unshift(playerPos);
+    }
+
+    this.playerLayer.moveAlongPath(path, {
+      speed: 180,
+      onArrive: () => {
+        this.currentSettlementIndex = target.index;
+      },
+    });
+  }
+
+  private isSamePoint(a: { x: number; y: number }, b: { x: number; y: number }): boolean {
+    const dx = a.x - b.x;
+    const dy = a.y - b.y;
+    return dx * dx + dy * dy < 0.01;
+  }
+
+  /**
    * 设置窗口大小调整处理器
    */
   private setupResizeHandler(): void {
@@ -337,12 +500,18 @@ export class MapGenerator {
     this.terrainLayer.destroy();
     this.settlementLayer?.destroy();
     this.roadLayer?.destroy();
+    this.playerLayer?.destroy();
+    this.detachPointerHandler();
+    this.playerLayer = null;
+    this.currentSettlementIndex = null;
+    this.roadGraph = null;
 
     // 根据当前模式选择纹理
     const textureToUse = this.isShowingHeightmap ? this.heightmapTexture : this.coloredTexture;
 
     // 创建新层
     this.createRenderLayers(textureToUse, settlements, roads);
+    this.setupNavigation(settlements, roads);
 
     console.log('✅ 地图已使用种子重新生成:', this.config.seed);
   }
@@ -411,9 +580,11 @@ export class MapGenerator {
   destroy(): void {
     console.log('🗑️ 正在销毁地图生成器...');
 
+    this.detachPointerHandler();
     this.terrainLayer?.destroy();
     this.settlementLayer?.destroy();
     this.roadLayer?.destroy();
+    this.playerLayer?.destroy();
     this.viewport?.destroy();
 
     if (this.app) {
@@ -425,5 +596,8 @@ export class MapGenerator {
     this.heightmapTexture = null;
     this.settlementLayer = null;
     this.roadLayer = null;
+    this.playerLayer = null;
+    this.roadGraph = null;
+    this.currentSettlementIndex = null;
   }
 }

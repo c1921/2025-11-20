@@ -119,6 +119,7 @@ if (typeof window !== 'undefined') {
       <div class="control-panel">
         <h2>地图生成器</h2>
         <p class="hint">🖱️ 拖动平移 • 滚轮缩放</p>
+        <p class="hint">👣 点击地图任意位置，玩家会沿道路的最短路径前进</p>
 
         <div class="seed-row">
           <span class="option-label">随机种子</span>

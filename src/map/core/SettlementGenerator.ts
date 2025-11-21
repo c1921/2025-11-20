@@ -282,6 +282,7 @@ export class SettlementGenerator {
         if (nx < 0 || ny < 0 || nx >= index.cols || ny >= index.rows) continue;
         const bucketIdx = ny * index.cols + nx;
         const bucket = index.buckets[bucketIdx];
+        if (!bucket) continue;
         for (const sIdx of bucket) {
           const s = settlements[sIdx];
           if (!s) continue;
@@ -305,6 +306,8 @@ export class SettlementGenerator {
     index: { cellSize: number; cols: number; rows: number; buckets: number[][] }
   ): void {
     const bucketIdx = this.getBucketIndex(x, y, index);
-    index.buckets[bucketIdx].push(settlementIndex);
+    const bucket = index.buckets[bucketIdx];
+    if (!bucket) return;
+    bucket.push(settlementIndex);
   }
 }
