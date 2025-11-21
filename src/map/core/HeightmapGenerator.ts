@@ -49,24 +49,17 @@ export class HeightmapGenerator {
   generate(): Float32Array {
     const { width, height, octaves, persistence, lacunarity, applyIslandMask } = this.config;
     const data = new Float32Array(width * height);
+    const invWidth = 1 / width;
+    const invHeight = 1 / height;
 
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        const idx = y * width + x;
-
-        // 将坐标归一化到 0-1 范围
-        const nx = x / width;
-        const ny = y / height;
-
-        // 生成多八度噪声值
+    for (let y = 0, idx = 0; y < height; y++) {
+      const ny = y * invHeight;
+      for (let x = 0; x < width; x++, idx++) {
+        const nx = x * invWidth;
         let value = this.generateOctaveNoise(nx, ny, octaves, persistence, lacunarity);
-
-        // 如果启用，则应用岛屿遮罩
         if (applyIslandMask) {
           value *= this.calculateIslandMask(nx, ny);
         }
-
-        // 限制在 0-1 范围内
         data[idx] = Math.max(0, Math.min(1, value));
       }
     }
@@ -412,30 +405,21 @@ export class HeightmapGenerator {
   generateWithDomainWarping(warpStrength: number = 0.1): Float32Array {
     const { width, height, octaves, persistence, lacunarity, applyIslandMask } = this.config;
     const data = new Float32Array(width * height);
+    const invWidth = 1 / width;
+    const invHeight = 1 / height;
 
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        const idx = y * width + x;
-
-        // 归一化坐标
-        const nx = x / width;
-        const ny = y / height;
-
-        // 域扭曲：使用噪声偏移采样坐标
+    for (let y = 0, idx = 0; y < height; y++) {
+      const ny = y * invHeight;
+      for (let x = 0; x < width; x++, idx++) {
+        const nx = x * invWidth;
         const warpX = this.noise2D(nx * 4, ny * 4) * warpStrength;
         const warpY = this.noise2D(nx * 4 + 100, ny * 4 + 100) * warpStrength;
-
         const warpedX = nx + warpX;
         const warpedY = ny + warpY;
-
-        // 在扭曲坐标处生成噪声
         let value = this.generateOctaveNoise(warpedX, warpedY, octaves, persistence, lacunarity);
-
-        // 应用岛屿遮罩
         if (applyIslandMask) {
           value *= this.calculateIslandMask(nx, ny);
         }
-
         data[idx] = Math.max(0, Math.min(1, value));
       }
     }
