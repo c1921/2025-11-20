@@ -21,6 +21,29 @@ export interface TerrainType {
 }
 
 /**
+ * 基于高度图生成的定居点
+ */
+export interface Settlement {
+  /** 世界坐标 X（像素） */
+  x: number;
+
+  /** 世界坐标 Y（像素） */
+  y: number;
+
+  /** 该点的海拔（0-1） */
+  elevation: number;
+
+  /** 适宜度，数值越高越适合居住（0-1） */
+  suitability: number;
+
+  /** 所在岛屿的编号（从 0 开始），无则为 -1 */
+  islandId?: number;
+
+  /** 所在岛屿的面积（以格子数计） */
+  islandArea?: number;
+}
+
+/**
  * 基于流积累的侵蚀配置
  */
 export interface FlowErosionConfig {
@@ -94,4 +117,7 @@ export interface MapData {
 
   /** 用于渲染的地形纹理 */
   terrainTexture: PIXI.Texture | null;
+
+  /** 根据高度图推算出的定居点 */
+  settlements: Settlement[];
 }

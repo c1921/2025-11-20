@@ -1,9 +1,11 @@
 import * as PIXI from 'pixi.js';
 import { HeightmapGenerator } from './core/HeightmapGenerator';
 import { TerrainRenderer } from './core/TerrainRenderer';
+import { SettlementGenerator } from './core/SettlementGenerator';
 import { TerrainLayer } from './render/TerrainLayer';
 import { MapViewport } from './render/MapViewport';
-import type { MapData } from './core/types';
+import { SettlementLayer } from './render/SettlementLayer';
+import type { MapData, Settlement } from './core/types';
 
 /**
  * 地图生成配置
@@ -36,6 +38,7 @@ export class MapGenerator {
   private app!: PIXI.Application;
   private viewport!: MapViewport;
   private terrainLayer!: TerrainLayer;
+  private settlementLayer: SettlementLayer | null = null;
 
   private mapData: MapData | null = null;
   private config!: Required<MapGeneratorConfig>;
@@ -68,6 +71,7 @@ export class MapGenerator {
     // 步骤 2：生成高度图
     console.log('🏔️ 正在生成高度图...');
     const heightmap = this.generateHeightmap();
+    const settlements = this.generateSettlements(heightmap);
 
     // 步骤 3：将高度图转换为纹理
     console.log('🎨 正在渲染地形纹理...');
@@ -83,6 +87,7 @@ export class MapGenerator {
       width: this.config.width,
       height: this.config.height,
       terrainTexture,
+      settlements,
     };
 
     // 步骤 4：设置视口
@@ -91,7 +96,7 @@ export class MapGenerator {
 
     // 步骤 5：创建渲染层
     console.log('🖼️ 正在创建渲染层...');
-    this.createRenderLayers(terrainTexture);
+    this.createRenderLayers(terrainTexture, settlements);
 
     // 步骤 6：处理窗口大小调整
     this.setupResizeHandler();
@@ -168,6 +173,25 @@ export class MapGenerator {
   }
 
   /**
+   * 根据高度图生成定居点数据
+   */
+  private generateSettlements(heightmap: Float32Array): Settlement[] {
+    return SettlementGenerator.generate(
+      heightmap,
+      this.config.width,
+      this.config.height,
+      this.config.seed,
+      {
+        coastThreshold: 0.35, // 与地形海岸线保持一致
+        fadeOutHeight: 0.92,
+        stride: 4,
+        baseChance: 0.1,
+        maxSettlements: 10000,
+      }
+    );
+  }
+
+  /**
    * 创建灰度高度图纹理（用于调试和可视化）
    * 复用 HeightmapGenerator 的调试预览功能
    */
@@ -191,10 +215,23 @@ export class MapGenerator {
   /**
    * 创建地形渲染层
    */
-  private createRenderLayers(terrainTexture: PIXI.Texture): void {
+  private createRenderLayers(terrainTexture: PIXI.Texture, settlements: Settlement[]): void {
     // 创建地形层（单个位图精灵）
     this.terrainLayer = new TerrainLayer(terrainTexture);
     this.terrainLayer.addToContainer(this.viewport.viewport);
+
+    // 创建定居点层（叠加在地形之上）
+    this.settlementLayer = new SettlementLayer(settlements, {
+      onClick: (settlement) => {
+        console.log('🏠 选中定居点', {
+          x: settlement.x.toFixed(1),
+          y: settlement.y.toFixed(1),
+          elevation: Number(settlement.elevation.toFixed(3)),
+          suitability: Number(settlement.suitability.toFixed(3)),
+        });
+      },
+    });
+    this.settlementLayer.addToContainer(this.viewport.viewport);
   }
 
   /**
@@ -227,6 +264,7 @@ export class MapGenerator {
 
     // 生成新数据
     const heightmap = this.generateHeightmap();
+    const settlements = this.generateSettlements(heightmap);
     const terrainTexture = this.createTerrainTexture(heightmap);
 
     // 生成高度图灰度纹理
@@ -239,16 +277,18 @@ export class MapGenerator {
       width: this.config.width,
       height: this.config.height,
       terrainTexture,
+      settlements,
     };
 
     // 销毁旧层
     this.terrainLayer.destroy();
+    this.settlementLayer?.destroy();
 
     // 根据当前模式选择纹理
     const textureToUse = this.isShowingHeightmap ? this.heightmapTexture : this.coloredTexture;
 
     // 创建新层
-    this.createRenderLayers(textureToUse);
+    this.createRenderLayers(textureToUse, settlements);
 
     console.log('✅ 地图已使用种子重新生成:', this.config.seed);
   }
@@ -318,6 +358,7 @@ export class MapGenerator {
     console.log('🗑️ 正在销毁地图生成器...');
 
     this.terrainLayer?.destroy();
+    this.settlementLayer?.destroy();
     this.viewport?.destroy();
 
     if (this.app) {
@@ -327,5 +368,6 @@ export class MapGenerator {
     this.mapData = null;
     this.coloredTexture = null;
     this.heightmapTexture = null;
+    this.settlementLayer = null;
   }
 }
