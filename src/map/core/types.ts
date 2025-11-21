@@ -41,7 +41,22 @@ export interface Settlement {
 
   /** 所在岛屿的面积（以格子数计） */
   islandArea?: number;
+
+  /** 与路网结合后的度数（直连邻居数量） */
+  roadDegree?: number;
+
+  /** 通过二跳可触达的节点数量，用于衡量辐射范围 */
+  secondHopReach?: number;
+
+  /** 成为城市的综合评分（0-1） */
+  cityScore?: number;
+
+  /** 分类结果 */
+  category?: SettlementCategory;
 }
+
+/** 定居点的等级分类 */
+export type SettlementCategory = 'village' | 'town' | 'city';
 
 /**
  * 基于流积累的侵蚀配置

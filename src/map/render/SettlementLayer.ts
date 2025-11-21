@@ -1,5 +1,5 @@
 import * as PIXI from 'pixi.js';
-import type { Settlement } from '../core/types';
+import type { Settlement, SettlementCategory } from '../core/types';
 
 export type SettlementLayerOptions = {
   /** 悬停回调，传入 null 表示离开 */
@@ -64,24 +64,49 @@ export class SettlementLayer {
 
     if (!settlements.length) return;
 
-    // 底层主标记
-    for (const settlement of settlements) {
-      const baseRadius = 2 + settlement.suitability * 2.2;
-      this.baseGraphics.circle(settlement.x, settlement.y, baseRadius);
-    }
-    this.baseGraphics.fill({ color: 0xffffff, alpha: 0.9 });
-    this.baseGraphics.stroke({ color: 0x0a1625, width: 1.2, alpha: 0.55 });
+    const grouped: Record<SettlementCategory, Settlement[]> = {
+      city: [],
+      town: [],
+      village: [],
+    };
 
-    // 内部高亮，强调核心
     for (const settlement of settlements) {
-      const highlightRadius = 0.9 + settlement.suitability;
-      this.highlightGraphics.circle(settlement.x, settlement.y, highlightRadius);
+      const category = this.getCategory(settlement);
+      grouped[category].push(settlement);
     }
-    this.highlightGraphics.fill({ color: 0xffc857, alpha: 0.9 });
+
+    const drawBaseGroup = (list: Settlement[], fillColor: number, strokeColor: number) => {
+      if (!list.length) return;
+      for (const settlement of list) {
+        this.baseGraphics.circle(settlement.x, settlement.y, this.getBaseRadius(settlement));
+      }
+      this.baseGraphics.fill({ color: fillColor, alpha: 0.92 });
+      this.baseGraphics.stroke({ color: strokeColor, width: 1.2, alpha: 0.6 });
+    };
+
+    drawBaseGroup(grouped.village, 0xffffff, 0x0a1625);
+    drawBaseGroup(grouped.town, 0xfde68a, 0x2f2a1a);
+    drawBaseGroup(grouped.city, 0xff4d4f, 0xff7530);
+
+    const drawHighlightGroup = (list: Settlement[], color: number, alpha: number) => {
+      if (!list.length) return;
+      for (const settlement of list) {
+        this.highlightGraphics.circle(
+          settlement.x,
+          settlement.y,
+          this.getHighlightRadius(settlement)
+        );
+      }
+      this.highlightGraphics.fill({ color, alpha });
+    };
+
+    drawHighlightGroup(grouped.village, 0xffc857, 0.9);
+    drawHighlightGroup(grouped.town, 0xf59e0b, 0.9);
+    drawHighlightGroup(grouped.city, 0x7f1d1d, 0.9);
 
     // 交互层：透明命中区，保持矢量图形，可捕获指针事件
     for (const settlement of settlements) {
-      const hoverRadius = 4 + settlement.suitability * 2.2;
+      const hoverRadius = this.getHoverRadius(settlement);
       const hitArea = new PIXI.Graphics();
       hitArea.circle(settlement.x, settlement.y, hoverRadius);
       hitArea.fill({ color: 0xffffff, alpha: 0.001 });
@@ -116,6 +141,48 @@ export class SettlementLayer {
       alpha: 0.95,
       alignment: 0.5,
     });
+  }
+
+  private getCategory(settlement: Settlement): SettlementCategory {
+    return settlement.category ?? 'village';
+  }
+
+  private getBaseRadius(settlement: Settlement): number {
+    const suitability = Math.max(0, settlement.suitability ?? 0);
+    switch (this.getCategory(settlement)) {
+      case 'city':
+        return 4.5 + suitability * 2.6;
+      case 'town':
+        return 3 + suitability * 1.9;
+      default:
+        return 2 + suitability * 1.4;
+    }
+  }
+
+  private getHighlightRadius(settlement: Settlement): number {
+    const suitability = Math.max(0, settlement.suitability ?? 0);
+    const base = 0.9 + suitability;
+    switch (this.getCategory(settlement)) {
+      case 'city':
+        return base + 1;
+      case 'town':
+        return base + 0.4;
+      default:
+        return base;
+    }
+  }
+
+  private getHoverRadius(settlement: Settlement): number {
+    const suitability = Math.max(0, settlement.suitability ?? 0);
+    const base = 4 + suitability * 2.2;
+    switch (this.getCategory(settlement)) {
+      case 'city':
+        return base + 3;
+      case 'town':
+        return base + 1.5;
+      default:
+        return base;
+    }
   }
 
   /**

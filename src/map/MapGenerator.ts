@@ -7,6 +7,7 @@ import { TerrainLayer } from './render/TerrainLayer';
 import { MapViewport } from './render/MapViewport';
 import { SettlementLayer } from './render/SettlementLayer';
 import { RoadLayer } from './render/RoadLayer';
+import { SettlementClassifier } from './core/SettlementClassifier';
 import type { MapData, Settlement, RoadSegment } from './core/types';
 
 /**
@@ -76,6 +77,7 @@ export class MapGenerator {
     const heightmap = this.generateHeightmap();
     const settlements = this.generateSettlements(heightmap);
     const roads = this.generateRoads(heightmap, settlements);
+    this.classifySettlements(settlements, roads);
 
     // 步骤 3：将高度图转换为纹理
     console.log('🎨 正在渲染地形纹理...');
@@ -201,7 +203,7 @@ export class MapGenerator {
    */
   private generateRoads(heightmap: Float32Array, settlements: Settlement[]): RoadSegment[] {
     return RoadGenerator.generate(settlements, {
-      kNearest: 5,
+      kNearest: 6,
       maxDistance: 360,
       forceMST: true,
       pathFactor: 1.15,
@@ -212,6 +214,18 @@ export class MapGenerator {
       slopeCost: 15,
       waterThreshold: 0.35,
       waterPenalty: 8,
+    });
+  }
+
+  /**
+   * 根据适宜度与路网对定居点分类并生成城市分数
+   */
+  private classifySettlements(settlements: Settlement[], roads: RoadSegment[]): void {
+    SettlementClassifier.classify(settlements, roads, {
+      minCityHops: 4,
+      cityShare: 0.05,
+      minCities: 5,
+      maxCities: 75,
     });
   }
 
@@ -260,6 +274,10 @@ export class MapGenerator {
           y: settlement.y.toFixed(1),
           elevation: Number(settlement.elevation.toFixed(3)),
           suitability: Number(settlement.suitability.toFixed(3)),
+          category: settlement.category ?? 'village',
+          cityScore: settlement.cityScore ? Number(settlement.cityScore.toFixed(3)) : 0,
+          neighbors: settlement.roadDegree ?? 0,
+          secondHop: settlement.secondHopReach ?? 0,
         });
       },
     });
@@ -298,6 +316,7 @@ export class MapGenerator {
     const heightmap = this.generateHeightmap();
     const settlements = this.generateSettlements(heightmap);
     const roads = this.generateRoads(heightmap, settlements);
+    this.classifySettlements(settlements, roads);
     const terrainTexture = this.createTerrainTexture(heightmap);
 
     // 生成高度图灰度纹理
