@@ -120,4 +120,30 @@ export interface MapData {
 
   /** 根据高度图推算出的定居点 */
   settlements: Settlement[];
+
+  /** 根据定居点生成的道路网络 */
+  roads: RoadSegment[];
+}
+
+/**
+ * 道路线段
+ */
+export interface RoadSegment {
+  /** 起点世界坐标（像素） */
+  x1: number;
+  y1: number;
+
+  /** 终点世界坐标（像素） */
+  x2: number;
+  y2: number;
+
+  /** 距离（像素） */
+  length: number;
+
+  /** 关联的定居点索引 */
+  aIndex: number;
+  bIndex: number;
+
+  /** 具体走向的折线路径，含起终点（像素坐标） */
+  points: Array<{ x: number; y: number }>;
 }

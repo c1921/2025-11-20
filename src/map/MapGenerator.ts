@@ -2,10 +2,12 @@ import * as PIXI from 'pixi.js';
 import { HeightmapGenerator } from './core/HeightmapGenerator';
 import { TerrainRenderer } from './core/TerrainRenderer';
 import { SettlementGenerator } from './core/SettlementGenerator';
+import { RoadGenerator } from './core/RoadGenerator';
 import { TerrainLayer } from './render/TerrainLayer';
 import { MapViewport } from './render/MapViewport';
 import { SettlementLayer } from './render/SettlementLayer';
-import type { MapData, Settlement } from './core/types';
+import { RoadLayer } from './render/RoadLayer';
+import type { MapData, Settlement, RoadSegment } from './core/types';
 
 /**
  * 地图生成配置
@@ -39,6 +41,7 @@ export class MapGenerator {
   private viewport!: MapViewport;
   private terrainLayer!: TerrainLayer;
   private settlementLayer: SettlementLayer | null = null;
+  private roadLayer: RoadLayer | null = null;
 
   private mapData: MapData | null = null;
   private config!: Required<MapGeneratorConfig>;
@@ -72,6 +75,7 @@ export class MapGenerator {
     console.log('🏔️ 正在生成高度图...');
     const heightmap = this.generateHeightmap();
     const settlements = this.generateSettlements(heightmap);
+    const roads = this.generateRoads(heightmap, settlements);
 
     // 步骤 3：将高度图转换为纹理
     console.log('🎨 正在渲染地形纹理...');
@@ -88,6 +92,7 @@ export class MapGenerator {
       height: this.config.height,
       terrainTexture,
       settlements,
+      roads,
     };
 
     // 步骤 4：设置视口
@@ -96,7 +101,7 @@ export class MapGenerator {
 
     // 步骤 5：创建渲染层
     console.log('🖼️ 正在创建渲染层...');
-    this.createRenderLayers(terrainTexture, settlements);
+    this.createRenderLayers(terrainTexture, settlements, roads);
 
     // 步骤 6：处理窗口大小调整
     this.setupResizeHandler();
@@ -192,6 +197,25 @@ export class MapGenerator {
   }
 
   /**
+   * 根据定居点生成道路网络
+   */
+  private generateRoads(heightmap: Float32Array, settlements: Settlement[]): RoadSegment[] {
+    return RoadGenerator.generate(settlements, {
+      kNearest: 5,
+      maxDistance: 360,
+      forceMST: true,
+      pathFactor: 1.15,
+      heightmap,
+      mapWidth: this.config.width,
+      mapHeight: this.config.height,
+      gridStep: 1,
+      slopeCost: 15,
+      waterThreshold: 0.35,
+      waterPenalty: 8,
+    });
+  }
+
+  /**
    * 创建灰度高度图纹理（用于调试和可视化）
    * 复用 HeightmapGenerator 的调试预览功能
    */
@@ -215,10 +239,18 @@ export class MapGenerator {
   /**
    * 创建地形渲染层
    */
-  private createRenderLayers(terrainTexture: PIXI.Texture, settlements: Settlement[]): void {
+  private createRenderLayers(
+    terrainTexture: PIXI.Texture,
+    settlements: Settlement[],
+    roads: RoadSegment[]
+  ): void {
     // 创建地形层（单个位图精灵）
     this.terrainLayer = new TerrainLayer(terrainTexture);
     this.terrainLayer.addToContainer(this.viewport.viewport);
+
+    // 道路层
+    this.roadLayer = new RoadLayer(roads);
+    this.roadLayer.addToContainer(this.viewport.viewport);
 
     // 创建定居点层（叠加在地形之上）
     this.settlementLayer = new SettlementLayer(settlements, {
@@ -265,6 +297,7 @@ export class MapGenerator {
     // 生成新数据
     const heightmap = this.generateHeightmap();
     const settlements = this.generateSettlements(heightmap);
+    const roads = this.generateRoads(heightmap, settlements);
     const terrainTexture = this.createTerrainTexture(heightmap);
 
     // 生成高度图灰度纹理
@@ -278,17 +311,19 @@ export class MapGenerator {
       height: this.config.height,
       terrainTexture,
       settlements,
+      roads,
     };
 
     // 销毁旧层
     this.terrainLayer.destroy();
     this.settlementLayer?.destroy();
+    this.roadLayer?.destroy();
 
     // 根据当前模式选择纹理
     const textureToUse = this.isShowingHeightmap ? this.heightmapTexture : this.coloredTexture;
 
     // 创建新层
-    this.createRenderLayers(textureToUse, settlements);
+    this.createRenderLayers(textureToUse, settlements, roads);
 
     console.log('✅ 地图已使用种子重新生成:', this.config.seed);
   }
@@ -359,6 +394,7 @@ export class MapGenerator {
 
     this.terrainLayer?.destroy();
     this.settlementLayer?.destroy();
+    this.roadLayer?.destroy();
     this.viewport?.destroy();
 
     if (this.app) {
@@ -369,5 +405,6 @@ export class MapGenerator {
     this.coloredTexture = null;
     this.heightmapTexture = null;
     this.settlementLayer = null;
+    this.roadLayer = null;
   }
 }
