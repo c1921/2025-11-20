@@ -5,6 +5,15 @@ type InternalHeightmapConfig = Omit<Required<HeightmapConfig>, 'erosion'> & {
   erosion: Required<FlowErosionConfig>;
 };
 
+type ErosionBuffers = {
+  flowDirection: Int32Array;
+  slopes: Float32Array;
+  order: Uint32Array;
+  flow: Float32Array;
+  workA: Float32Array;
+  workB: Float32Array;
+};
+
 /**
  * 使用多八度 simplex 噪声生成高度图
  * 创建具有岛屿遮罩的逼真地形以形成大陆状形状
@@ -12,6 +21,7 @@ type InternalHeightmapConfig = Omit<Required<HeightmapConfig>, 'erosion'> & {
 export class HeightmapGenerator {
   private noise2D: ReturnType<typeof makeNoise2D>;
   private config: InternalHeightmapConfig;
+  private erosionBuffers: ErosionBuffers;
 
   constructor(config: HeightmapConfig) {
     // 使用种子初始化噪声生成器
@@ -39,6 +49,19 @@ export class HeightmapGenerator {
       lacunarity: config.lacunarity ?? 2.0,
       applyIslandMask: config.applyIslandMask ?? true,
       erosion: erosionConfig,
+    };
+
+    this.erosionBuffers = this.createErosionBuffers(this.config.width * this.config.height);
+  }
+
+  private createErosionBuffers(size: number): ErosionBuffers {
+    return {
+      flowDirection: new Int32Array(size),
+      slopes: new Float32Array(size),
+      order: new Uint32Array(size),
+      flow: new Float32Array(size),
+      workA: new Float32Array(size),
+      workB: new Float32Array(size),
     };
   }
 
@@ -181,9 +204,12 @@ export class HeightmapGenerator {
   private finalizeHeightmap(heightmap: Float32Array): Float32Array {
     const iterations = this.config.erosion.erosionIterations;
     let current = heightmap;
+    const buffers = this.erosionBuffers;
+    let reuseSortedOrder = false;
 
     for (let i = 0; i < iterations; i++) {
-      current = this.applyFlowBasedErosion(current, i);
+      current = this.applyFlowBasedErosion(current, i, buffers, reuseSortedOrder);
+      reuseSortedOrder = true;
     }
 
     return this.enhanceContrast(current);
@@ -196,21 +222,24 @@ export class HeightmapGenerator {
    * 3) 侵蚀量 ~ flow^exp * slope
    * 4) 简单平滑模拟沉积
    */
-  private applyFlowBasedErosion(heightmap: Float32Array, iteration: number): Float32Array {
+  private applyFlowBasedErosion(
+    heightmap: Float32Array,
+    iteration: number,
+    buffers: ErosionBuffers,
+    reuseSortedOrder: boolean
+  ): Float32Array {
     const { width, height, erosion } = this.config;
     if (!erosion.enabled) {
       return heightmap;
     }
 
+    const { flowDirection, slopes, order, flow, workA, workB } = buffers;
     const size = width * height;
-    const flowDirection = new Int32Array(size);
-    const slopes = new Float32Array(size);
     flowDirection.fill(-1);
 
     // Step 1: D8 流向和坡度（最陡的邻居）
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        const idx = y * width + x;
+    for (let y = 0, idx = 0; y < height; y++) {
+      for (let x = 0; x < width; x++, idx++) {
         const currentHeight = heightmap[idx] ?? 0;
 
         let bestSlope = 0;
@@ -245,17 +274,17 @@ export class HeightmapGenerator {
     }
 
     // Step 2: 高到低累积流量
-    const order = new Uint32Array(size);
-    for (let i = 0; i < size; i++) {
-      order[i] = i;
+    if (!reuseSortedOrder) {
+      for (let i = 0; i < size; i++) {
+        order[i] = i;
+      }
+      order.sort((a, b) => {
+        const hb = heightmap[b] ?? 0;
+        const ha = heightmap[a] ?? 0;
+        return hb - ha;
+      });
     }
-    order.sort((a, b) => {
-      const hb = heightmap[b] ?? 0;
-      const ha = heightmap[a] ?? 0;
-      return hb - ha;
-    });
 
-    const flow = new Float32Array(size);
     flow.fill(erosion.rainfall);
 
     for (let i = 0; i < size; i++) {
@@ -267,7 +296,7 @@ export class HeightmapGenerator {
     }
 
     // Step 3: 基于流量和坡度的侵蚀
-    const eroded = new Float32Array(size);
+    const eroded = heightmap === workA ? workB : workA;
     let minErosion = Infinity;
     let maxErosion = 0;
     let totalErosion = 0;
@@ -296,7 +325,12 @@ export class HeightmapGenerator {
     const result =
       erosion.smoothingIterations <= 0 || erosion.smoothingBlend <= 0
         ? eroded
-        : this.smoothHeightmap(eroded, erosion.smoothingIterations, erosion.smoothingBlend);
+        : this.smoothHeightmap(
+            eroded,
+            erosion.smoothingIterations,
+            erosion.smoothingBlend,
+            eroded === workA ? workB : workA
+          );
 
     this.logErosionSummary(erosion, {
       minErosion,
@@ -357,15 +391,23 @@ export class HeightmapGenerator {
   /**
    * 邻域平均的平滑，避免侵蚀产生的尖锐噪声
    */
-  private smoothHeightmap(heightmap: Float32Array, iterations: number, blend: number): Float32Array {
+  private smoothHeightmap(
+    source: Float32Array,
+    iterations: number,
+    blend: number,
+    scratch: Float32Array
+  ): Float32Array {
     const { width, height } = this.config;
     const clampedBlend = Math.max(0, Math.min(1, blend));
 
-    let current: Float32Array = heightmap;
+    if (iterations <= 0 || clampedBlend <= 0) {
+      return source;
+    }
+
+    let current = source;
+    let next = scratch;
 
     for (let iter = 0; iter < iterations; iter++) {
-      const next = new Float32Array(current.length);
-
       for (let y = 0; y < height; y++) {
         for (let x = 0; x < width; x++) {
           const idx = y * width + x;
@@ -392,7 +434,9 @@ export class HeightmapGenerator {
         }
       }
 
+      const tmp = current;
       current = next;
+      next = tmp;
     }
 
     return current;
