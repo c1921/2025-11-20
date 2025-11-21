@@ -12,6 +12,7 @@ import { PlayerLayer } from './render/PlayerLayer';
 import { RoadPathfinder } from './core/RoadPathfinder';
 import type { RoadGraph } from './core/RoadPathfinder';
 import type { MapData, Settlement, RoadSegment } from './core/types';
+import type { MapSavePayload } from './storage/MapPersistence';
 
 /**
  * 地图生成配置
@@ -43,7 +44,7 @@ export interface MapGeneratorConfig {
 export class MapGenerator {
   private app!: PIXI.Application;
   private viewport!: MapViewport;
-  private terrainLayer!: TerrainLayer;
+  private terrainLayer: TerrainLayer | null = null;
   private settlementLayer: SettlementLayer | null = null;
   private roadLayer: RoadLayer | null = null;
   private playerLayer: PlayerLayer | null = null;
@@ -57,6 +58,7 @@ export class MapGenerator {
   private roadGraph: RoadGraph | null = null;
   private currentSettlementIndex: number | null = null;
   private mapTapHandler: ((event: PIXI.FederatedPointerEvent) => void) | null = null;
+  private resizeHandler: (() => void) | null = null;
 
   /**
    * 初始化并生成地图
@@ -86,37 +88,8 @@ export class MapGenerator {
     const roads = this.generateRoads(heightmap, settlements);
     this.classifySettlements(settlements, roads);
 
-    // 步骤 3：将高度图转换为纹理
-    console.log('🎨 正在渲染地形纹理...');
-    const terrainTexture = this.createTerrainTexture(heightmap);
-
-    // 生成高度图灰度纹理
-    this.heightmapTexture = this.createGrayscaleHeightmapTexture(heightmap);
-    this.coloredTexture = terrainTexture;
-
-    // 存储地图数据
-    this.mapData = {
-      heightmap,
-      width: this.config.width,
-      height: this.config.height,
-      terrainTexture,
-      settlements,
-      roads,
-    };
-
-    // 步骤 4：设置视口
-    console.log('📷 正在设置视口...');
-    this.setupViewport();
-
-    // 步骤 5：创建渲染层
-    console.log('🖼️ 正在创建渲染层...');
-    this.createRenderLayers(terrainTexture, settlements, roads);
-
-    // 步骤 5.5：配置玩家标记与交互
-    this.setupNavigation(settlements, roads);
-
-    // 步骤 6：处理窗口大小调整
-    this.setupResizeHandler();
+    this.resetLayerState();
+    this.renderMap(heightmap, settlements, roads);
 
     console.log('✅ 地图生成器：初始化完成！');
     console.log(`   - 地图大小：${this.config.width}x${this.config.height}`);
@@ -250,6 +223,63 @@ export class MapGenerator {
     const texture = PIXI.Texture.from(canvas);
     texture.source.scaleMode = 'linear';
     return texture;
+  }
+
+  /**
+   * 基于给定数据渲染地图与各层
+   */
+  private renderMap(heightmap: Float32Array, settlements: Settlement[], roads: RoadSegment[]): void {
+    console.log('🎨 正在渲染地形纹理...');
+    const terrainTexture = this.createTerrainTexture(heightmap);
+    const grayscaleTexture = this.createGrayscaleHeightmapTexture(heightmap);
+
+    this.coloredTexture = terrainTexture;
+    this.heightmapTexture = grayscaleTexture;
+
+    this.mapData = {
+      heightmap,
+      width: this.config.width,
+      height: this.config.height,
+      terrainTexture,
+      settlements,
+      roads,
+    };
+
+    if (!this.viewport) {
+      console.log('📷 正在设置视口...');
+      this.setupViewport();
+      this.setupResizeHandler();
+    }
+
+    const initialTexture =
+      this.isShowingHeightmap && grayscaleTexture ? grayscaleTexture : terrainTexture;
+
+    console.log('🖼️ 正在创建渲染层...');
+    this.createRenderLayers(initialTexture, settlements, roads);
+
+    console.log('🧭 正在配置导航...');
+    this.setupNavigation(settlements, roads);
+  }
+
+  /**
+   * 清理渲染层与交互状态（保留 Pixi 应用与视口）
+   */
+  private resetLayerState(): void {
+    this.detachPointerHandler();
+    this.terrainLayer?.destroy();
+    this.settlementLayer?.destroy();
+    this.roadLayer?.destroy();
+    this.playerLayer?.destroy();
+
+    this.terrainLayer = null;
+    this.settlementLayer = null;
+    this.roadLayer = null;
+    this.playerLayer = null;
+    this.roadGraph = null;
+    this.currentSettlementIndex = null;
+    this.mapData = null;
+    this.coloredTexture = null;
+    this.heightmapTexture = null;
   }
 
 
@@ -451,7 +481,10 @@ export class MapGenerator {
    * 设置窗口大小调整处理器
    */
   private setupResizeHandler(): void {
-    const handleResize = () => {
+    if (this.resizeHandler) return;
+
+    this.resizeHandler = () => {
+      if (!this.app || !this.viewport) return;
       const width = window.innerWidth;
       const height = window.innerHeight;
 
@@ -462,7 +495,7 @@ export class MapGenerator {
       this.viewport.handleResize(width, height);
     };
 
-    window.addEventListener('resize', handleResize);
+    window.addEventListener('resize', this.resizeHandler);
   }
 
   /**
@@ -480,38 +513,11 @@ export class MapGenerator {
     const settlements = this.generateSettlements(heightmap);
     const roads = this.generateRoads(heightmap, settlements);
     this.classifySettlements(settlements, roads);
-    const terrainTexture = this.createTerrainTexture(heightmap);
 
-    // 生成高度图灰度纹理
-    this.heightmapTexture = this.createGrayscaleHeightmapTexture(heightmap);
-    this.coloredTexture = terrainTexture;
-
-    // 更新地图数据
-    this.mapData = {
-      heightmap,
-      width: this.config.width,
-      height: this.config.height,
-      terrainTexture,
-      settlements,
-      roads,
-    };
-
-    // 销毁旧层
-    this.terrainLayer.destroy();
-    this.settlementLayer?.destroy();
-    this.roadLayer?.destroy();
-    this.playerLayer?.destroy();
-    this.detachPointerHandler();
-    this.playerLayer = null;
-    this.currentSettlementIndex = null;
-    this.roadGraph = null;
-
-    // 根据当前模式选择纹理
-    const textureToUse = this.isShowingHeightmap ? this.heightmapTexture : this.coloredTexture;
+    this.resetLayerState();
 
     // 创建新层
-    this.createRenderLayers(textureToUse, settlements, roads);
-    this.setupNavigation(settlements, roads);
+    this.renderMap(heightmap, settlements, roads);
 
     console.log('✅ 地图已使用种子重新生成:', this.config.seed);
   }
@@ -540,6 +546,75 @@ export class MapGenerator {
   }
 
   /**
+   * 生成用于存档的纯数据快照（不含 PIXI 纹理）
+   */
+  createSavePayload(): MapSavePayload | null {
+    if (!this.mapData || !this.config) return null;
+
+    const heightmapCopy = new Float32Array(this.mapData.heightmap.length);
+    heightmapCopy.set(this.mapData.heightmap);
+
+    return {
+      version: 1,
+      seed: this.config.seed,
+      width: this.config.width,
+      height: this.config.height,
+      useShading: this.config.useShading,
+      enableErosion: this.config.enableErosion,
+      createdAt: Date.now(),
+      map: {
+        heightmap: heightmapCopy.buffer,
+        settlements: this.mapData.settlements,
+        roads: this.mapData.roads,
+      },
+      player: this.playerLayer
+        ? {
+            ...this.playerLayer.getPosition(),
+            currentSettlementIndex: this.currentSettlementIndex ?? null,
+          }
+        : undefined,
+    };
+  }
+
+  /**
+   * 使用存档快照初始化地图（绕过生成流程）
+   */
+  async loadFromSave(container: HTMLElement, save: MapSavePayload): Promise<void> {
+    this.config = {
+      width: save.width,
+      height: save.height,
+      seed: save.seed,
+      useShading: save.useShading,
+      enableErosion: save.enableErosion,
+      container,
+    };
+
+    console.log('📂 正在从存档加载地图...');
+
+    // 创建 Pixi 应用
+    await this.createPixiApp();
+
+    // 用存档覆盖当前层
+    this.resetLayerState();
+
+    const heightmap = new Float32Array(save.map.heightmap);
+    const settlements = save.map.settlements ?? [];
+    const roads = save.map.roads ?? [];
+
+    // 使用已有视口直接渲染
+    this.renderMap(heightmap, settlements, roads);
+
+    // 恢复玩家位置
+    if (save.player && this.playerLayer) {
+      this.playerLayer.setPosition(save.player.x, save.player.y);
+      this.currentSettlementIndex = save.player.currentSettlementIndex ?? null;
+      this.viewport.moveTo(save.player.x, save.player.y, false);
+    }
+
+    this.isShowingHeightmap = false;
+  }
+
+  /**
    * 获取用于相机控制的视口
    */
   getViewport(): MapViewport {
@@ -550,8 +625,8 @@ export class MapGenerator {
    * 切换显示模式：灰度高度图 <-> 彩色地形图
    */
   toggleViewMode(): void {
-    if (!this.coloredTexture || !this.heightmapTexture) {
-      console.warn('纹理未初始化');
+    if (!this.coloredTexture || !this.heightmapTexture || !this.terrainLayer) {
+      console.warn('纹理或地形层未初始化');
       return;
     }
 
@@ -581,6 +656,10 @@ export class MapGenerator {
     console.log('🗑️ 正在销毁地图生成器...');
 
     this.detachPointerHandler();
+    if (this.resizeHandler) {
+      window.removeEventListener('resize', this.resizeHandler);
+      this.resizeHandler = null;
+    }
     this.terrainLayer?.destroy();
     this.settlementLayer?.destroy();
     this.roadLayer?.destroy();

@@ -1,13 +1,17 @@
 <script setup lang="ts">
 import { onUnmounted, ref } from 'vue';
 import { MapGenerator } from '../map/MapGenerator';
+import { MapPersistence, type MapSaveRecord } from '../map/storage/MapPersistence';
 
 const mapContainer = ref<HTMLDivElement | null>(null);
 const isGenerating = ref(false);
+const isSaving = ref(false);
+const isLoadingSave = ref(false);
 const isHeightmapMode = ref(false);
 const hasMap = ref(false);
 const erosionEnabled = ref(false);
 const seedInput = ref('');
+const saveMessage = ref('');
 let mapGenerator: MapGenerator | null = null;
 
 const createRandomSeed = (): number => {
@@ -34,6 +38,76 @@ const resolveSeed = (): number => {
 };
 
 applyRandomSeed();
+
+const SAVE_SLOT_ID = 'latest';
+
+const saveCurrentMap = async () => {
+  if (!mapGenerator) {
+    saveMessage.value = '没有可保存的地图';
+    return;
+  }
+
+  const payload = mapGenerator.createSavePayload();
+  if (!payload) {
+    saveMessage.value = '没有可保存的数据';
+    return;
+  }
+
+  const record: MapSaveRecord = {
+    id: SAVE_SLOT_ID,
+    title: `种子 ${payload.seed} 的存档`,
+    ...payload,
+  };
+
+  isSaving.value = true;
+  try {
+    await MapPersistence.save(record);
+    saveMessage.value = '已保存到本地 IndexedDB（覆盖 latest 槽位）';
+    console.log('💾 已保存本地存档', record);
+  } catch (error) {
+    console.error('保存存档失败', error);
+    saveMessage.value = '保存失败，请查看控制台';
+  } finally {
+    isSaving.value = false;
+  }
+};
+
+const loadLatestSave = async () => {
+  if (!mapContainer.value) return;
+  if (isGenerating.value || isSaving.value || isLoadingSave.value) return;
+
+  isLoadingSave.value = true;
+  try {
+    const record = await MapPersistence.latest();
+    if (!record) {
+      saveMessage.value = '没有可用的本地存档';
+      return;
+    }
+
+    if (mapGenerator) {
+      mapGenerator.destroy();
+      mapGenerator = null;
+    }
+
+    mapGenerator = new MapGenerator();
+    await mapGenerator.loadFromSave(mapContainer.value, record);
+
+    seedInput.value = record.seed.toString();
+    erosionEnabled.value = record.enableErosion;
+    isHeightmapMode.value = false;
+    hasMap.value = true;
+    saveMessage.value = `已读取本地存档（${new Date(record.createdAt).toLocaleString()}）`;
+
+    if (typeof window !== 'undefined') {
+      (window as any).mapGenerator = mapGenerator;
+    }
+  } catch (error) {
+    console.error('读取存档失败', error);
+    saveMessage.value = '读取失败，请查看控制台';
+  } finally {
+    isLoadingSave.value = false;
+  }
+};
 
 const generateMap = async () => {
   if (!mapContainer.value || isGenerating.value) return;
@@ -166,6 +240,24 @@ if (typeof window !== 'undefined') {
           >
             {{ isHeightmapMode ? '🎨 彩色地图' : '📊 高度图' }}
           </button>
+
+          <button
+            class="save-btn"
+            @click="saveCurrentMap"
+            :disabled="isSaving || isGenerating || !hasMap"
+          >
+            {{ isSaving ? '保存中...' : '💾 保存到本地' }}
+          </button>
+
+          <button
+            class="load-btn"
+            @click="loadLatestSave"
+            :disabled="isLoadingSave || isGenerating || isSaving || !mapContainer"
+          >
+            {{ isLoadingSave ? '读取中...' : '📂 读取本地存档' }}
+          </button>
+
+          <p v-if="saveMessage" class="save-hint">{{ saveMessage }}</p>
         </div>
       </div>
     </div>
@@ -397,6 +489,54 @@ if (typeof window !== 'undefined') {
   opacity: 0.6;
   cursor: not-allowed;
   background: linear-gradient(135deg, #555 0%, #666 100%);
+}
+
+.save-btn,
+.load-btn {
+  width: 100%;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.save-btn {
+  background: linear-gradient(135deg, #06b6d4 0%, #0ea5e9 100%);
+  box-shadow: 0 2px 8px rgba(14, 165, 233, 0.35);
+}
+
+.save-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(14, 165, 233, 0.55);
+}
+
+.load-btn {
+  background: linear-gradient(135deg, #f59e0b 0%, #f97316 100%);
+  box-shadow: 0 2px 8px rgba(249, 115, 22, 0.35);
+}
+
+.load-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(249, 115, 22, 0.55);
+}
+
+.save-btn:disabled,
+.load-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background: linear-gradient(135deg, #555 0%, #666 100%);
+  box-shadow: none;
+}
+
+.save-hint {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: #9ae6b4;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
 }
 
 .empty-state {
