@@ -21,6 +21,9 @@ export interface MapGeneratorConfig {
   /** 启用地形阴影以实现光照效果 */
   useShading?: boolean;
 
+  /** 是否启用基于流向/流量的侵蚀 */
+  enableErosion?: boolean;
+
   /** Pixi 画布的容器元素 */
   container: HTMLElement;
 }
@@ -53,6 +56,7 @@ export class MapGenerator {
       height: config.height ?? 2048,
       seed: config.seed ?? Date.now(),
       useShading: config.useShading ?? true,
+      enableErosion: config.enableErosion ?? false,
       container: config.container,
     };
 
@@ -95,6 +99,7 @@ export class MapGenerator {
     console.log('✅ 地图生成器：初始化完成！');
     console.log(`   - 地图大小：${this.config.width}x${this.config.height}`);
     console.log(`   - 种子：${this.config.seed}`);
+    console.log(`   - 侵蚀：${this.config.enableErosion ? '开启' : '关闭'}`);
   }
 
   /**
@@ -129,8 +134,9 @@ export class MapGenerator {
       lacunarity: 2.0,
       applyIslandMask: true,
       erosion: {
+        enabled: this.config.enableErosion,
         logDebug: true, // 输出侵蚀统计，便于观察效果
-        erosionIterations: 30, // 多步叠加侵蚀
+        erosionIterations: 100, // 多步叠加侵蚀
         strength: 0.0015, // 单步强度稍降，多轮叠加
         flowExponent: 0.8, // 提高大河刻蚀能力
         smoothingIterations: 0, // 先观察裸侵蚀效果
