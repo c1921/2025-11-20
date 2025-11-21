@@ -10,8 +10,8 @@ export class TerrainRenderer {
    * 带有高度阈值的地形颜色定义
    */
   private static readonly TERRAIN_COLORS: Record<string, TerrainType> = {
-    deepOcean: { r: 8, g: 20, b: 65, threshold: 0.0 },          // 深海
-    ocean: { r: 17, g: 46, b: 110, threshold: 0.12 },           // 海洋
+    deepOcean: { r: 8, g: 20, b: 65, threshold: 0.2 },          // 深海
+    ocean: { r: 17, g: 46, b: 110, threshold: 0.32 },           // 海洋
     mediumOcean: { r: 34, g: 78, b: 138, threshold: 0.349 },     // 中层海洋
     shallowOcean: { r: 52, g: 112, b: 64, threshold: 0.35 },    // 浅海/海岸（海陆分界线）
     lowlands: { r: 66, g: 131, b: 62, threshold: 0.40 },        // 低地

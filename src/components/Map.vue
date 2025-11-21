@@ -7,7 +7,33 @@ const isGenerating = ref(false);
 const isHeightmapMode = ref(false);
 const hasMap = ref(false);
 const erosionEnabled = ref(false);
+const seedInput = ref('');
 let mapGenerator: MapGenerator | null = null;
+
+const createRandomSeed = (): number => {
+  const randomPart = Math.floor(Math.random() * 1_000_000_000);
+  const timestampPart = Date.now() & 0xffffffff;
+  return (randomPart ^ timestampPart) >>> 0;
+};
+
+const applyRandomSeed = (): number => {
+  const seed = createRandomSeed();
+  seedInput.value = seed.toString();
+  return seed;
+};
+
+const resolveSeed = (): number => {
+  const raw = seedInput.value.trim();
+  const parsed = Number(raw);
+  if (raw !== '' && Number.isFinite(parsed)) {
+    const normalized = Math.trunc(parsed);
+    seedInput.value = normalized.toString();
+    return normalized;
+  }
+  return applyRandomSeed();
+};
+
+applyRandomSeed();
 
 const generateMap = async () => {
   if (!mapContainer.value || isGenerating.value) return;
@@ -26,11 +52,13 @@ const generateMap = async () => {
     // Create and initialize new map generator
     mapGenerator = new MapGenerator();
 
+    const seed = resolveSeed();
+
     await mapGenerator.initialize({
       container: mapContainer.value,
       width: 1024,
       height: 1024,
-      seed: Date.now(),
+      seed,
       useShading: true,
       enableErosion: erosionEnabled.value,
     });
@@ -56,6 +84,10 @@ const toggleViewMode = () => {
   isHeightmapMode.value = mapGenerator.isHeightmapMode();
 };
 
+const randomizeSeed = () => {
+  applyRandomSeed();
+};
+
 onUnmounted(() => {
   // Clean up resources when component is destroyed
   if (mapGenerator) {
@@ -78,7 +110,7 @@ if (typeof window !== 'undefined') {
     <div v-if="!hasMap" class="empty-state">
       <div class="empty-card">
         <p class="empty-title">暂无地图</p>
-        <p class="empty-tip">点击左上角的「随机生成」按钮开始创建。</p>
+        <p class="empty-tip">点击左上角的「生成」按钮（可设置随机种子）开始创建。</p>
       </div>
     </div>
 
@@ -87,6 +119,27 @@ if (typeof window !== 'undefined') {
       <div class="control-panel">
         <h2>地图生成器</h2>
         <p class="hint">🖱️ 拖动平移 • 滚轮缩放</p>
+
+        <div class="seed-row">
+          <span class="option-label">随机种子</span>
+          <div class="seed-controls">
+            <input
+              class="seed-input"
+              v-model="seedInput"
+              type="text"
+              :disabled="isGenerating"
+              placeholder="输入或生成种子"
+            >
+            <button
+              class="seed-random-btn"
+              type="button"
+              @click="randomizeSeed"
+              :disabled="isGenerating"
+            >
+              🎲 生成
+            </button>
+          </div>
+        </div>
 
         <div class="option-row">
           <span class="option-label">侵蚀效果</span>
@@ -102,7 +155,7 @@ if (typeof window !== 'undefined') {
             @click="generateMap"
             :disabled="isGenerating"
           >
-            {{ isGenerating ? '生成中...' : '🎲 随机生成' }}
+            {{ isGenerating ? '生成中...' : '⚙️ 生成' }}
           </button>
 
           <button
@@ -174,6 +227,67 @@ if (typeof window !== 'undefined') {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.seed-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.seed-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.seed-input {
+  flex: 1;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.seed-input:focus {
+  border-color: #667eea;
+  box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.35);
+}
+
+.seed-input:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.seed-random-btn {
+  padding: 8px 12px;
+  border: none;
+  border-radius: 6px;
+  background: linear-gradient(135deg, #ff9f48 0%, #ff6a3d 100%);
+  box-shadow: 0 2px 8px rgba(255, 159, 72, 0.3);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.seed-random-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(255, 159, 72, 0.5);
+}
+
+.seed-random-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background: linear-gradient(135deg, #555 0%, #666 100%);
+  box-shadow: none;
 }
 
 .option-row {
