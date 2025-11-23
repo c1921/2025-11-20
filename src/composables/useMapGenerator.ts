@@ -168,6 +168,22 @@ export function useMapGenerator() {
     hasMap.value = false;
   };
 
+  // 清理地图（返回主菜单时调用）
+  const clearMap = () => {
+    cleanup();
+    saveMessage.value = '';
+    isHeightmapMode.value = false;
+    console.log('🗑️ 地图已清理');
+  };
+
+  // 重置配置（创建新游戏时调用）
+  const resetConfig = () => {
+    applyRandomSeed();
+    erosionEnabled.value = false;
+    saveMessage.value = '';
+    console.log('🔄 配置已重置');
+  };
+
   onUnmounted(cleanup);
 
   // 暴露给调试
@@ -193,6 +209,8 @@ export function useMapGenerator() {
     saveCurrentMap,
     toggleViewMode,
     randomizeSeed,
+    clearMap,
+    resetConfig,
     cleanup
   };
 }

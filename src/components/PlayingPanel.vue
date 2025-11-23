@@ -9,7 +9,7 @@ defineProps<{
 const emit = defineEmits<{
   'toggle-view': [];
   save: [];
-  'return-setup': [];
+  'return-menu': [];
 }>();
 </script>
 
@@ -39,9 +39,9 @@ const emit = defineEmits<{
 
         <button
           class="btn btn-ghost"
-          @click="emit('return-setup')"
+          @click="emit('return-menu')"
         >
-          ⚙️ 返回设置
+          🏠 返回主菜单
         </button>
 
         <p v-if="saveMessage" class="text-xs text-success mt-1">{{ saveMessage }}</p>

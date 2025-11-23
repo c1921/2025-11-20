@@ -3,16 +3,14 @@ defineProps<{
   seedInput: string;
   erosionEnabled: boolean;
   isGenerating: boolean;
-  isLoadingSave: boolean;
-  isSaving: boolean;
   hasMap: boolean;
   saveMessage: string;
 }>();
 
 const emit = defineEmits<{
   generate: [];
-  load: [];
   start: [];
+  back: [];
   randomize: [];
   'update:seedInput': [value: string];
   'update:erosionEnabled': [value: boolean];
@@ -72,19 +70,19 @@ const emit = defineEmits<{
         </button>
 
         <button
-          class="btn btn-secondary"
-          @click="emit('load')"
-          :disabled="isLoadingSave || isGenerating || isSaving"
-        >
-          {{ isLoadingSave ? '读取中...' : '📂 读取本地存档' }}
-        </button>
-
-        <button
           class="btn btn-success btn-lg"
           @click="emit('start')"
           :disabled="!hasMap || isGenerating"
         >
           🎮 开始游戏
+        </button>
+
+        <button
+          class="btn btn-ghost"
+          @click="emit('back')"
+          :disabled="isGenerating"
+        >
+          ◀️ 返回主菜单
         </button>
 
         <p v-if="saveMessage" class="text-xs text-success mt-1">{{ saveMessage }}</p>

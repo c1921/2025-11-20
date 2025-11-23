@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { useGameStore } from '../stores/gameStore';
 import { useMapGenerator } from '../composables/useMapGenerator';
+import MenuPanel from './MenuPanel.vue';
 import SetupPanel from './SetupPanel.vue';
 import PlayingPanel from './PlayingPanel.vue';
 import EmptyMapHint from './EmptyMapHint.vue';
 
-const { isSetupPhase, isPlayingPhase, startGame, returnToSetup } = useGameStore();
+const { isMenuPhase, isSetupPhase, isPlayingPhase, goToSetup, startGame, returnToMenu } = useGameStore();
 
 const {
   mapContainer,
@@ -21,8 +22,30 @@ const {
   loadLatestSave,
   saveCurrentMap,
   toggleViewMode,
-  randomizeSeed
+  randomizeSeed,
+  clearMap,
+  resetConfig
 } = useMapGenerator();
+
+// 创建新游戏（重置配置并进入设置阶段）
+const handleNewGame = () => {
+  resetConfig();
+  goToSetup();
+};
+
+// 加载存档后直接进入游戏
+const handleLoadAndPlay = async () => {
+  await loadLatestSave();
+  if (hasMap.value) {
+    startGame();
+  }
+};
+
+// 返回主菜单（清理地图）
+const handleReturnToMenu = () => {
+  clearMap();
+  returnToMenu();
+};
 </script>
 
 <template>
@@ -30,19 +53,29 @@ const {
     <!-- Full-screen canvas container -->
     <div ref="mapContainer" class="map-container"></div>
 
+    <!-- 主菜单阶段：居中显示 -->
+    <div v-if="isMenuPhase" class="menu-state">
+      <MenuPanel
+        :is-loading-save="isLoadingSave"
+        :is-saving="isSaving"
+        :save-message="saveMessage"
+        @new-game="handleNewGame"
+        @load="handleLoadAndPlay"
+        @settings="() => {}"
+      />
+    </div>
+
     <!-- 设置阶段：控制面板在角落，地图可见 -->
     <div v-if="isSetupPhase" class="map-controls">
       <SetupPanel
         :seed-input="seedInput"
         :erosion-enabled="erosionEnabled"
         :is-generating="isGenerating"
-        :is-loading-save="isLoadingSave"
-        :is-saving="isSaving"
         :has-map="hasMap"
         :save-message="saveMessage"
         @generate="generateMap"
-        @load="loadLatestSave"
         @start="startGame"
+        @back="handleReturnToMenu"
         @randomize="randomizeSeed"
         @update:seed-input="seedInput = $event"
         @update:erosion-enabled="erosionEnabled = $event"
@@ -63,7 +96,7 @@ const {
         :save-message="saveMessage"
         @toggle-view="toggleViewMode"
         @save="saveCurrentMap"
-        @return-setup="returnToSetup"
+        @return-menu="handleReturnToMenu"
       />
     </div>
   </div>
@@ -97,5 +130,15 @@ const {
   justify-content: center;
   pointer-events: none;
   z-index: 10;
+}
+
+.menu-state {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  background: #0a0a0f;
 }
 </style>

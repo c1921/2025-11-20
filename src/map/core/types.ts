@@ -7,6 +7,8 @@ import * as PIXI from 'pixi.js';
  * 游戏阶段
  */
 export const GamePhase = {
+  /** 主菜单：开始界面 */
+  MENU: 'menu',
   /** 设置阶段：配置参数、生成地图 */
   SETUP: 'setup',
   /** 游戏阶段：探索、移动、交互 */
