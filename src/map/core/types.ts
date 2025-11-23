@@ -4,6 +4,18 @@
 import * as PIXI from 'pixi.js';
 
 /**
+ * 游戏阶段
+ */
+export const GamePhase = {
+  /** 设置阶段：配置参数、生成地图 */
+  SETUP: 'setup',
+  /** 游戏阶段：探索、移动、交互 */
+  PLAYING: 'playing'
+} as const;
+
+export type GamePhase = typeof GamePhase[keyof typeof GamePhase];
+
+/**
  * 地形类型定义，包含颜色和高度阈值
  */
 export interface TerrainType {
