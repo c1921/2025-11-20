@@ -1,37 +1,153 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, watch } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { useGameStore } from '../stores/gameStore';
-import { useTimeStore } from '../stores/timeStore';
-import { useMapGenerator } from '../composables/useMapGenerator';
+import { useWorld } from '../composables/useWorld';
+import type { World } from '../world/World';
 import MenuPanel from './MenuPanel.vue';
 import SetupPanel from './SetupPanel.vue';
 import PlayingPanel from './PlayingPanel.vue';
 import EmptyMapHint from './EmptyMapHint.vue';
 import TimeDisplay from './TimeDisplay.vue';
 import TravelInfo from './TravelInfo.vue';
+import WorldDebugPanel from './WorldDebugPanel.vue';
 
 const { isMenuPhase, isSetupPhase, isPlayingPhase, goToSetup, startGame, returnToMenu } = useGameStore();
-const timeStore = useTimeStore();
 
-const {
-  mapContainer,
-  isGenerating,
-  isSaving,
-  isLoadingSave,
-  isHeightmapMode,
-  hasMap,
-  erosionEnabled,
-  seedInput,
-  saveMessage,
-  generateMap,
-  loadLatestSave,
-  saveCurrentMap,
-  toggleViewMode,
-  randomizeSeed,
-  clearMap,
-  resetConfig,
-  getPlayerLayer
-} = useMapGenerator();
+const { world, snapshot, createWorld, startWorld, pauseWorld, destroyWorld, saveWorld, loadLatestSave } = useWorld();
+
+// 地图容器引用
+const mapContainer = ref<HTMLDivElement | null>(null);
+
+// 提供给模板使用的 world 值
+const worldValue = computed(() => world.value as World | null);
+
+// 地图配置
+const seedInput = ref(Date.now().toString());
+const erosionEnabled = ref(false);
+const isHeightmapMode = ref(false);
+
+// 状态标志
+const isGenerating = ref(false);
+const isSaving = ref(false);
+const isLoadingSave = ref(false);
+const saveMessage = ref('');
+
+// 计算属性
+const hasMap = computed(() => snapshot.value.isInitialized);
+const isDev = import.meta.env.DEV;
+
+// 生成地图
+const generateMap = async () => {
+  if (!mapContainer.value) {
+    console.error('地图容器未准备好');
+    return;
+  }
+
+  isGenerating.value = true;
+  try {
+    const seed = parseInt(seedInput.value) || Date.now();
+
+    await createWorld({
+      mapConfig: {
+        container: mapContainer.value,
+        width: 1024,
+        height: 1024,
+        seed,
+        useShading: true,
+        enableErosion: erosionEnabled.value,
+      },
+    });
+
+    console.log('✅ 地图生成完成');
+  } catch (error) {
+    console.error('地图生成失败:', error);
+  } finally {
+    isGenerating.value = false;
+  }
+};
+
+// 切换视图模式
+const toggleViewMode = () => {
+  const generator = world.value?.getMapSystem()?.getGenerator();
+  if (generator) {
+    generator.toggleViewMode();
+    isHeightmapMode.value = !isHeightmapMode.value;
+  }
+};
+
+// 保存地图
+const saveCurrentMap = async () => {
+  if (!world.value) {
+    saveMessage.value = '❌ 没有可保存的地图';
+    return;
+  }
+
+  isSaving.value = true;
+  saveMessage.value = '';
+
+  try {
+    await saveWorld();
+    saveMessage.value = '✅ 保存成功！';
+    setTimeout(() => {
+      saveMessage.value = '';
+    }, 3000);
+  } catch (error) {
+    console.error('保存失败:', error);
+    saveMessage.value = '❌ 保存失败';
+  } finally {
+    isSaving.value = false;
+  }
+};
+
+// 加载存档
+const loadSave = async () => {
+  if (!mapContainer.value) {
+    console.error('地图容器未准备好');
+    return;
+  }
+
+  isLoadingSave.value = true;
+  saveMessage.value = '';
+
+  try {
+    const success = await loadLatestSave(mapContainer.value);
+    if (success) {
+      saveMessage.value = '✅ 存档加载成功！';
+      setTimeout(() => {
+        saveMessage.value = '';
+      }, 3000);
+    } else {
+      saveMessage.value = '❌ 没有找到存档';
+    }
+  } catch (error) {
+    console.error('加载失败:', error);
+    saveMessage.value = '❌ 加载失败';
+  } finally {
+    isLoadingSave.value = false;
+  }
+};
+
+// 随机种子
+const randomizeSeed = () => {
+  seedInput.value = Date.now().toString();
+};
+
+// 重置配置
+const resetConfig = () => {
+  seedInput.value = Date.now().toString();
+  erosionEnabled.value = false;
+  isHeightmapMode.value = false;
+};
+
+// 清除地图
+const clearMap = () => {
+  destroyWorld();
+};
+
+// 获取玩家图层
+const getPlayerLayer = () => {
+  return world.value?.getMapSystem()?.getPlayerLayer() ?? null;
+};
 
 // 创建新游戏（重置配置并进入设置阶段）
 const handleNewGame = () => {
@@ -41,7 +157,7 @@ const handleNewGame = () => {
 
 // 加载存档后直接进入游戏
 const handleLoadAndPlay = async () => {
-  await loadLatestSave();
+  await loadSave();
   if (hasMap.value) {
     startGame();
   }
@@ -53,41 +169,12 @@ const handleReturnToMenu = () => {
   returnToMenu();
 };
 
-// 游戏主循环
-let animationFrameId: number | null = null;
-
-function gameLoop(timestamp: number) {
-  // 更新时间系统
-  if (isPlayingPhase.value) {
-    timeStore.update(timestamp);
-  }
-
-  // 继续循环
-  animationFrameId = requestAnimationFrame(gameLoop);
-}
-
-// 启动和停止游戏循环
-onMounted(() => {
-  animationFrameId = requestAnimationFrame(gameLoop);
-  console.log('🎮 游戏循环已启动');
-});
-
-onUnmounted(() => {
-  if (animationFrameId !== null) {
-    cancelAnimationFrame(animationFrameId);
-    animationFrameId = null;
-    console.log('🛑 游戏循环已停止');
-  }
-});
-
-// 当进入游戏阶段时，初始化时间系统
+// 监听游戏阶段，控制世界运行
 watch(isPlayingPhase, (playing) => {
   if (playing) {
-    // 如果是新游戏，重置时间
-    if (timeStore.totalDays.value === 0) {
-      timeStore.reset(0);
-      console.log('🕐 时间系统已初始化');
-    }
+    startWorld();
+  } else {
+    pauseWorld();
   }
 });
 </script>
@@ -146,12 +233,17 @@ watch(isPlayingPhase, (playing) => {
 
     <!-- 游戏阶段：时间显示在右上角 -->
     <div v-if="isPlayingPhase" class="time-panel">
-      <TimeDisplay />
+      <TimeDisplay :world="worldValue" />
     </div>
 
     <!-- 游戏阶段：旅行信息显示在左下角 -->
     <div v-if="isPlayingPhase" class="travel-panel">
       <TravelInfo :player-layer="getPlayerLayer()" />
+    </div>
+
+    <!-- 开发模式：World 调试面板显示在右下角 -->
+    <div v-if="isDev && hasMap" class="debug-panel">
+      <WorldDebugPanel :world="worldValue" :snapshot="snapshot" />
     </div>
   </div>
 </template>
@@ -207,6 +299,13 @@ watch(isPlayingPhase, (playing) => {
   position: absolute;
   bottom: 20px;
   left: 20px;
+  z-index: 100;
+}
+
+.debug-panel {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
   z-index: 100;
 }
 </style>

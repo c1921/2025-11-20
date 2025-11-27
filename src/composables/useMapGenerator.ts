@@ -1,3 +1,19 @@
+/**
+ * @deprecated 此文件已废弃，请使用 src/composables/useWorld.ts 代替
+ *
+ * 旧版地图生成器组合式函数
+ * 已被统一的 World 系统取代
+ *
+ * 迁移指南：
+ * - useMapGenerator() -> useWorld()
+ * - mapGenerator.generateMap() -> world.createWorld()
+ * - mapGenerator.saveCurrentMap() -> saveWorld()
+ * - mapGenerator.loadLatestSave() -> loadLatestSave()
+ * - mapGenerator.hasMap -> snapshot.isInitialized
+ *
+ * 此文件保留仅用于参考，未来版本将删除
+ */
+
 import { ref, onUnmounted } from 'vue';
 import { MapGenerator } from '../map/MapGenerator';
 import { MapPersistence, type MapSaveRecord } from '../map/storage/MapPersistence';

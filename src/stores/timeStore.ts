@@ -1,6 +1,16 @@
 /**
- * 时间系统状态管理
- * 负责游戏时间的存储、推进和控制
+ * @deprecated 此文件已废弃，请使用 src/world/systems/TimeSystem.ts 代替
+ *
+ * 旧版时间系统状态管理（基于 Vue Composition API）
+ * 已被纯 TypeScript 版本的 TimeSystem 取代
+ *
+ * 迁移指南：
+ * - useTimeStore() -> world.getTimeSystem()
+ * - timeStore.update(timestamp) -> timeSystem.update(timestamp)
+ * - timeStore.currentTime -> timeSystem.getCurrentTime()
+ * - timeStore.setTimeSpeed(speed) -> timeSystem.setTimeSpeed(speed)
+ *
+ * 此文件保留仅用于参考，未来版本将删除
  */
 
 import { ref, computed } from 'vue';

@@ -1,5 +1,5 @@
 import * as PIXI from 'pixi.js';
-import { useTimeStore } from '../../stores/timeStore';
+import type { TimeSystem } from '../../world/systems/TimeSystem';
 
 export interface PlayerMoveOptions {
   targetSettlement?: number;
@@ -16,6 +16,7 @@ export class PlayerLayer {
   private marker: PIXI.Graphics;
   private shadow: PIXI.Graphics;
   private app: PIXI.Application;
+  private timeSystem: TimeSystem | null = null;
 
   private currentPath: Array<{ x: number; y: number }> = [];
   private segmentIndex = 0;
@@ -51,6 +52,13 @@ export class PlayerLayer {
 
   addToContainer(parent: PIXI.Container): void {
     parent.addChild(this.container);
+  }
+
+  /**
+   * 设置时间系统引用（由 MapSystem 注入）
+   */
+  setTimeSystem(timeSystem: TimeSystem): void {
+    this.timeSystem = timeSystem;
   }
 
   /**
@@ -113,9 +121,9 @@ export class PlayerLayer {
       return;
     }
 
-    // 获取时间系统
-    const timeStore = useTimeStore();
-    const timeSpeed = timeStore.timeSpeed.value;
+    // 从注入的 timeSystem 获取时间速度
+    if (!this.timeSystem) return;
+    const timeSpeed = this.timeSystem.getTimeSpeed();
 
     // 时间暂停时不移动
     if (timeSpeed === 0) return;
