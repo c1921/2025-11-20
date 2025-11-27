@@ -1,4 +1,5 @@
 import type { Settlement, RoadSegment } from '../core/types';
+import type { TimeSpeed } from '../../time/types';
 
 export interface MapSavePayload {
   /** 数据版本，便于将来迁移 */
@@ -21,6 +22,11 @@ export interface MapSavePayload {
     x: number;
     y: number;
     currentSettlementIndex: number | null;
+  };
+  /** 时间系统状态 */
+  time?: {
+    totalDays: number;
+    timeSpeed: TimeSpeed;
   };
 }
 

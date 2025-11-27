@@ -1,12 +1,16 @@
 <script setup lang="ts">
+import { onMounted, onUnmounted, watch } from 'vue';
 import { useGameStore } from '../stores/gameStore';
+import { useTimeStore } from '../stores/timeStore';
 import { useMapGenerator } from '../composables/useMapGenerator';
 import MenuPanel from './MenuPanel.vue';
 import SetupPanel from './SetupPanel.vue';
 import PlayingPanel from './PlayingPanel.vue';
 import EmptyMapHint from './EmptyMapHint.vue';
+import TimeDisplay from './TimeDisplay.vue';
 
 const { isMenuPhase, isSetupPhase, isPlayingPhase, goToSetup, startGame, returnToMenu } = useGameStore();
+const timeStore = useTimeStore();
 
 const {
   mapContainer,
@@ -46,6 +50,44 @@ const handleReturnToMenu = () => {
   clearMap();
   returnToMenu();
 };
+
+// 游戏主循环
+let animationFrameId: number | null = null;
+
+function gameLoop(timestamp: number) {
+  // 更新时间系统
+  if (isPlayingPhase.value) {
+    timeStore.update(timestamp);
+  }
+
+  // 继续循环
+  animationFrameId = requestAnimationFrame(gameLoop);
+}
+
+// 启动和停止游戏循环
+onMounted(() => {
+  animationFrameId = requestAnimationFrame(gameLoop);
+  console.log('🎮 游戏循环已启动');
+});
+
+onUnmounted(() => {
+  if (animationFrameId !== null) {
+    cancelAnimationFrame(animationFrameId);
+    animationFrameId = null;
+    console.log('🛑 游戏循环已停止');
+  }
+});
+
+// 当进入游戏阶段时，初始化时间系统
+watch(isPlayingPhase, (playing) => {
+  if (playing) {
+    // 如果是新游戏，重置时间
+    if (timeStore.totalDays.value === 0) {
+      timeStore.reset(0);
+      console.log('🕐 时间系统已初始化');
+    }
+  }
+});
 </script>
 
 <template>
@@ -99,6 +141,11 @@ const handleReturnToMenu = () => {
         @return-menu="handleReturnToMenu"
       />
     </div>
+
+    <!-- 游戏阶段：时间显示在右上角 -->
+    <div v-if="isPlayingPhase" class="time-panel">
+      <TimeDisplay />
+    </div>
   </div>
 </template>
 
@@ -140,5 +187,12 @@ const handleReturnToMenu = () => {
   justify-content: center;
   z-index: 100;
   background: #0a0a0f;
+}
+
+.time-panel {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  z-index: 100;
 }
 </style>

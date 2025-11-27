@@ -1,6 +1,7 @@
 import { ref, onUnmounted } from 'vue';
 import { MapGenerator } from '../map/MapGenerator';
 import { MapPersistence, type MapSaveRecord } from '../map/storage/MapPersistence';
+import { useTimeStore } from '../stores/timeStore';
 
 const SAVE_SLOT_ID = 'latest';
 
@@ -15,6 +16,9 @@ export function useMapGenerator() {
   const seedInput = ref('');
   const saveMessage = ref('');
   let mapGenerator: MapGenerator | null = null;
+
+  // 获取时间系统状态
+  const timeStore = useTimeStore();
 
   const createRandomSeed = (): number => {
     const randomPart = Math.floor(Math.random() * 1_000_000_000);
@@ -54,17 +58,19 @@ export function useMapGenerator() {
       return;
     }
 
+    // 添加时间系统状态
     const record: MapSaveRecord = {
       id: SAVE_SLOT_ID,
       title: `种子 ${payload.seed} 的存档`,
       ...payload,
+      time: timeStore.getState(),
     };
 
     isSaving.value = true;
     try {
       await MapPersistence.save(record);
       saveMessage.value = '已保存到本地 IndexedDB（覆盖 latest 槽位）';
-      console.log('💾 已保存本地存档', record);
+      console.log('💾 已保存本地存档（含时间状态）', record);
     } catch (error) {
       console.error('保存存档失败', error);
       saveMessage.value = '保存失败，请查看控制台';
@@ -98,6 +104,16 @@ export function useMapGenerator() {
       isHeightmapMode.value = false;
       hasMap.value = true;
       saveMessage.value = `已读取本地存档（${new Date(record.createdAt).toLocaleString()}）`;
+
+      // 加载时间系统状态
+      if (record.time) {
+        timeStore.loadState(record.time);
+        console.log('🕐 已加载时间状态', record.time);
+      } else {
+        // 旧版存档没有时间数据，重置为初始状态
+        timeStore.reset(0);
+        console.log('🕐 旧版存档，时间系统已重置');
+      }
 
       if (typeof window !== 'undefined') {
         (window as any).mapGenerator = mapGenerator;
