@@ -433,6 +433,13 @@ export class MapGenerator {
     if (this.currentSettlementIndex === target.index && this.isSamePoint(playerPos, target.settlement)) {
       return; // 已在目标点附近
     }
+
+    // 如果正在移动，先停止当前移动，重新规划路径
+    if (this.playerLayer.isMoving) {
+      console.log('🔄 中断当前移动，重新规划路径');
+      this.playerLayer.stopMovement();
+    }
+
     const startIdx = this.findNearestSettlementIndex(
       playerPos.x,
       playerPos.y,
@@ -464,11 +471,14 @@ export class MapGenerator {
     }
 
     this.playerLayer.moveAlongPath(path, {
-      speed: 180,
+      targetSettlement: target.index,
       onArrive: () => {
         this.currentSettlementIndex = target.index;
+        console.log(`✅ 已到达 ${target.index} 号定居点`);
       },
     });
+
+    console.log(`📍 前往 ${target.index} 号定居点`);
   }
 
   private isSamePoint(a: { x: number; y: number }, b: { x: number; y: number }): boolean {
@@ -647,6 +657,13 @@ export class MapGenerator {
    */
   isHeightmapMode(): boolean {
     return this.isShowingHeightmap;
+  }
+
+  /**
+   * 获取玩家图层实例
+   */
+  getPlayerLayer(): PlayerLayer | null {
+    return this.playerLayer;
   }
 
   /**

@@ -1,7 +1,8 @@
 import * as PIXI from 'pixi.js';
+import { useTimeStore } from '../../stores/timeStore';
 
 export interface PlayerMoveOptions {
-  speed?: number;
+  targetSettlement?: number;
   onArrive?: () => void;
 }
 
@@ -19,7 +20,10 @@ export class PlayerLayer {
   private currentPath: Array<{ x: number; y: number }> = [];
   private segmentIndex = 0;
   private segmentProgress = 0;
-  private moveSpeed = 140; // 像素/秒
+  private gameSpeed = 50; // 像素/游戏天
+  private totalPathLength = 0; // 总路径长度（像素）
+  private traveledDistance = 0; // 已旅行距离（像素）
+  private targetSettlementIndex: number | null = null; // 目标定居点
   private onArrive: (() => void) | null = null;
   private tickerHandler: ((ticker: PIXI.Ticker) => void) | null = null;
 
@@ -70,11 +74,18 @@ export class PlayerLayer {
     this.stopMovement();
     if (!path.length) return;
 
-    this.moveSpeed = Math.max(20, options.speed ?? this.moveSpeed);
+    this.targetSettlementIndex = options.targetSettlement ?? null;
     this.onArrive = options.onArrive ?? null;
     this.currentPath = path;
     this.segmentIndex = 0;
     this.segmentProgress = 0;
+    this.traveledDistance = 0;
+
+    // 计算总路径长度
+    this.totalPathLength = 0;
+    for (let i = 0; i < path.length - 1; i++) {
+      this.totalPathLength += this.distance(path[i]!, path[i + 1]!);
+    }
 
     this.drawPath(path);
     const first = path[0]!;
@@ -102,7 +113,22 @@ export class PlayerLayer {
       return;
     }
 
-    let remaining = this.moveSpeed * (ticker.deltaMS / 1000);
+    // 获取时间系统
+    const timeStore = useTimeStore();
+    const timeSpeed = timeStore.timeSpeed.value;
+
+    // 时间暂停时不移动
+    if (timeSpeed === 0) return;
+
+    // 计算本帧时间推进（游戏天数）
+    const deltaTime = ticker.deltaMS / 1000; // 秒
+    const gameDaysThisFrame = timeSpeed * deltaTime; // timeSpeed 是 天/秒
+
+    // 计算应该移动的像素数
+    const pixelsToMove = gameDaysThisFrame * this.gameSpeed;
+
+    // 沿路径移动
+    let remaining = pixelsToMove;
     while (remaining > 0 && this.segmentIndex < this.currentPath.length - 1) {
       const start = this.currentPath[this.segmentIndex]!;
       const end = this.currentPath[this.segmentIndex + 1]!;
@@ -117,11 +143,13 @@ export class PlayerLayer {
       const distToEnd = segLen - this.segmentProgress;
       if (remaining < distToEnd) {
         this.segmentProgress += remaining;
+        this.traveledDistance += remaining;
         remaining = 0;
         const t = this.segmentProgress / segLen;
         this.applyPosition(start, end, t);
       } else {
         remaining -= distToEnd;
+        this.traveledDistance += distToEnd;
         this.segmentIndex++;
         this.segmentProgress = 0;
         this.setPosition(end.x, end.y);
@@ -193,8 +221,46 @@ export class PlayerLayer {
     this.currentPath = [];
     this.segmentIndex = 0;
     this.segmentProgress = 0;
+    this.totalPathLength = 0;
+    this.traveledDistance = 0;
+    this.targetSettlementIndex = null;
     this.pathGraphics.clear();
     this.onArrive?.();
+  }
+
+  /**
+   * 检查是否正在移动
+   */
+  get isMoving(): boolean {
+    return this.tickerHandler !== null;
+  }
+
+  /**
+   * 计算剩余距离（像素）
+   */
+  getRemainingDistance(): number {
+    return this.totalPathLength - this.traveledDistance;
+  }
+
+  /**
+   * 计算剩余天数
+   */
+  getRemainingDays(): number {
+    return this.getRemainingDistance() / this.gameSpeed;
+  }
+
+  /**
+   * 计算总旅行天数
+   */
+  getTotalTravelDays(): number {
+    return this.totalPathLength / this.gameSpeed;
+  }
+
+  /**
+   * 获取目标定居点
+   */
+  getTargetSettlement(): number | null {
+    return this.targetSettlementIndex;
   }
 
   private distance(a: { x: number; y: number }, b: { x: number; y: number }): number {

@@ -8,6 +8,7 @@ import SetupPanel from './SetupPanel.vue';
 import PlayingPanel from './PlayingPanel.vue';
 import EmptyMapHint from './EmptyMapHint.vue';
 import TimeDisplay from './TimeDisplay.vue';
+import TravelInfo from './TravelInfo.vue';
 
 const { isMenuPhase, isSetupPhase, isPlayingPhase, goToSetup, startGame, returnToMenu } = useGameStore();
 const timeStore = useTimeStore();
@@ -28,7 +29,8 @@ const {
   toggleViewMode,
   randomizeSeed,
   clearMap,
-  resetConfig
+  resetConfig,
+  getPlayerLayer
 } = useMapGenerator();
 
 // 创建新游戏（重置配置并进入设置阶段）
@@ -146,6 +148,11 @@ watch(isPlayingPhase, (playing) => {
     <div v-if="isPlayingPhase" class="time-panel">
       <TimeDisplay />
     </div>
+
+    <!-- 游戏阶段：旅行信息显示在左下角 -->
+    <div v-if="isPlayingPhase" class="travel-panel">
+      <TravelInfo :player-layer="getPlayerLayer()" />
+    </div>
   </div>
 </template>
 
@@ -193,6 +200,13 @@ watch(isPlayingPhase, (playing) => {
   position: absolute;
   top: 20px;
   right: 20px;
+  z-index: 100;
+}
+
+.travel-panel {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
   z-index: 100;
 }
 </style>

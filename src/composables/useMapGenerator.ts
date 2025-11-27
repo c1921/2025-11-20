@@ -207,6 +207,11 @@ export function useMapGenerator() {
     (window as any).mapGenerator = mapGenerator;
   }
 
+  // 获取玩家图层实例
+  const getPlayerLayer = () => {
+    return mapGenerator?.getPlayerLayer() ?? null;
+  };
+
   return {
     // Refs
     mapContainer,
@@ -227,6 +232,7 @@ export function useMapGenerator() {
     randomizeSeed,
     clearMap,
     resetConfig,
-    cleanup
+    cleanup,
+    getPlayerLayer
   };
 }
