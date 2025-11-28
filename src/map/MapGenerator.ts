@@ -13,6 +13,7 @@ import { RoadPathfinder } from './core/RoadPathfinder';
 import type { RoadGraph } from './core/RoadPathfinder';
 import type { MapData, Settlement, RoadSegment } from './core/types';
 import type { MapSavePayload } from './storage/MapPersistence';
+import { RoadSerializer } from './storage/RoadSerializer';
 
 /**
  * 地图生成配置
@@ -59,6 +60,10 @@ export class MapGenerator {
   private currentSettlementIndex: number | null = null;
   private mapTapHandler: ((event: PIXI.FederatedPointerEvent) => void) | null = null;
   private resizeHandler: (() => void) | null = null;
+
+  // 定居点点击回调（由外部设置）
+  public onSettlementClick: ((settlement: Settlement, index: number) => void) | null = null;
+  public onSettlementRightClick: ((settlement: Settlement, index: number, event: PIXI.FederatedPointerEvent) => void) | null = null;
 
   /**
    * 初始化并生成地图
@@ -309,16 +314,12 @@ export class MapGenerator {
     // 创建定居点层（叠加在地形之上）
     this.settlementLayer = new SettlementLayer(settlements, {
       onClick: (settlement) => {
-        console.log('🏠 选中定居点', {
-          x: settlement.x.toFixed(1),
-          y: settlement.y.toFixed(1),
-          elevation: Number(settlement.elevation.toFixed(3)),
-          suitability: Number(settlement.suitability.toFixed(3)),
-          category: settlement.category ?? 'village',
-          cityScore: settlement.cityScore ? Number(settlement.cityScore.toFixed(3)) : 0,
-          neighbors: settlement.roadDegree ?? 0,
-          secondHop: settlement.secondHopReach ?? 0,
-        });
+        const index = settlements.indexOf(settlement);
+        this.onSettlementClick?.(settlement, index);
+      },
+      onRightClick: (settlement, event) => {
+        const index = settlements.indexOf(settlement);
+        this.onSettlementRightClick?.(settlement, index, event);
       },
     });
     this.settlementLayer.addToContainer(this.viewport.viewport);
@@ -348,7 +349,8 @@ export class MapGenerator {
       }
     }
 
-    this.attachPointerHandler();
+    // 注释掉地图点击移动功能，改用右键菜单触发移动
+    // this.attachPointerHandler();
   }
 
   /**
@@ -409,11 +411,11 @@ export class MapGenerator {
     return result ? result.index : null;
   }
 
-  private attachPointerHandler(): void {
-    if (!this.viewport?.viewport) return;
-    this.mapTapHandler = (event: PIXI.FederatedPointerEvent) => this.handleMapTap(event);
-    this.viewport.viewport.on('pointertap', this.mapTapHandler);
-  }
+  // private attachPointerHandler(): void {
+  //   if (!this.viewport?.viewport) return;
+  //   this.mapTapHandler = (event: PIXI.FederatedPointerEvent) => this.handleMapTap(event);
+  //   this.viewport.viewport.on('pointertap', this.mapTapHandler);
+  // }
 
   private detachPointerHandler(): void {
     if (this.mapTapHandler && this.viewport?.viewport) {
@@ -422,38 +424,110 @@ export class MapGenerator {
     this.mapTapHandler = null;
   }
 
-  private handleMapTap(event: PIXI.FederatedPointerEvent): void {
+  // private handleMapTap(event: PIXI.FederatedPointerEvent): void {
+  //   if (!this.mapData || !this.playerLayer || !this.roadGraph) return;
+
+  //   const world = this.viewport.screenToWorld(event.global.x, event.global.y);
+  //   const target = this.findNearestSettlement(world.x, world.y, this.mapData.settlements);
+  //   if (!target) return;
+
+  //   const playerPos = this.playerLayer.getPosition();
+  //   if (this.currentSettlementIndex === target.index && this.isSamePoint(playerPos, target.settlement)) {
+  //     return; // 已在目标点附近
+  //   }
+
+  //   // 如果正在移动，先停止当前移动，重新规划路径
+  //   if (this.playerLayer.isMoving) {
+  //     console.log('🔄 中断当前移动，重新规划路径');
+  //     this.playerLayer.stopMovement();
+  //   }
+
+  //   const startIdx = this.findNearestSettlementIndex(
+  //     playerPos.x,
+  //     playerPos.y,
+  //     this.mapData.settlements
+  //   );
+
+  //   if (startIdx === null) return;
+
+  //   const route = RoadPathfinder.shortestPath(startIdx, target.index, this.roadGraph);
+  //   if (!route) {
+  //     console.warn('未找到可通行的道路路径');
+  //     return;
+  //   }
+
+  //   const path = RoadPathfinder.buildPointPath(
+  //     route.nodes,
+  //     this.mapData.roads,
+  //     this.roadGraph,
+  //     this.mapData.settlements
+  //   );
+
+  //   if (!path || !path.length) {
+  //     console.warn('无法构建移动路径');
+  //     return;
+  //   }
+
+  //   if (!this.isSamePoint(playerPos, path[0]!)) {
+  //     path.unshift(playerPos);
+  //   }
+
+  //   this.playerLayer.moveAlongPath(path, {
+  //     targetSettlement: target.index,
+  //     onArrive: () => {
+  //       this.currentSettlementIndex = target.index;
+  //       console.log(`✅ 已到达 ${target.index} 号定居点`);
+  //     },
+  //   });
+
+  //   console.log(`📍 前往 ${target.index} 号定居点`);
+  // }
+
+  /**
+   * 移动到指定定居点（公开方法，供外部调用）
+   * @param targetIndex 目标定居点索引
+   */
+  public moveToSettlement(targetIndex: number): void {
     if (!this.mapData || !this.playerLayer || !this.roadGraph) return;
 
-    const world = this.viewport.screenToWorld(event.global.x, event.global.y);
-    const target = this.findNearestSettlement(world.x, world.y, this.mapData.settlements);
-    if (!target) return;
-
-    const playerPos = this.playerLayer.getPosition();
-    if (this.currentSettlementIndex === target.index && this.isSamePoint(playerPos, target.settlement)) {
-      return; // 已在目标点附近
+    const target = this.mapData.settlements[targetIndex];
+    if (!target) {
+      console.error('❌ 目标定居点不存在');
+      return;
     }
 
-    // 如果正在移动，先停止当前移动，重新规划路径
+    const playerPos = this.playerLayer.getPosition();
+
+    // 如果已在目标位置，不移动
+    if (this.currentSettlementIndex === targetIndex &&
+        this.isSamePoint(playerPos, target)) {
+      console.log('⚠️ 已在目标位置');
+      return;
+    }
+
+    // 中断当前移动
     if (this.playerLayer.isMoving) {
       console.log('🔄 中断当前移动，重新规划路径');
       this.playerLayer.stopMovement();
     }
 
-    const startIdx = this.findNearestSettlementIndex(
-      playerPos.x,
-      playerPos.y,
-      this.mapData.settlements
-    );
+    // 确定起点
+    const startIdx = this.currentSettlementIndex ??
+      this.findNearestSettlementIndex(playerPos.x, playerPos.y, this.mapData.settlements);
 
-    if (startIdx === null) return;
-
-    const route = RoadPathfinder.shortestPath(startIdx, target.index, this.roadGraph);
-    if (!route) {
-      console.warn('未找到可通行的道路路径');
+    if (startIdx === null) {
+      console.error('❌ 无法确定起点');
       return;
     }
 
+    // 寻路
+    const route = RoadPathfinder.shortestPath(startIdx, targetIndex, this.roadGraph);
+    if (!route) {
+      console.error('❌ 无法找到路径');
+      return;
+    }
+
+    // 构建点路径
     const path = RoadPathfinder.buildPointPath(
       route.nodes,
       this.mapData.roads,
@@ -462,23 +536,25 @@ export class MapGenerator {
     );
 
     if (!path || !path.length) {
-      console.warn('无法构建移动路径');
+      console.error('❌ 无法构建路径点');
       return;
     }
 
+    // 如果起点不在路径开始位置，添加当前位置
     if (!this.isSamePoint(playerPos, path[0]!)) {
       path.unshift(playerPos);
     }
 
+    // 启动移动
     this.playerLayer.moveAlongPath(path, {
-      targetSettlement: target.index,
+      targetSettlement: targetIndex,
       onArrive: () => {
-        this.currentSettlementIndex = target.index;
-        console.log(`✅ 已到达 ${target.index} 号定居点`);
+        this.currentSettlementIndex = targetIndex;
+        console.log(`✅ 已到达 ${targetIndex} 号定居点`);
       },
     });
 
-    console.log(`📍 前往 ${target.index} 号定居点`);
+    console.log(`🚀 开始移动: ${startIdx} → ${targetIndex}，总计 ${route.distance.toFixed(1)} 像素`);
   }
 
   private isSamePoint(a: { x: number; y: number }, b: { x: number; y: number }): boolean {
@@ -564,8 +640,25 @@ export class MapGenerator {
     const heightmapCopy = new Float32Array(this.mapData.heightmap.length);
     heightmapCopy.set(this.mapData.heightmap);
 
+    // 序列化道路数据
+    const serializedRoads = RoadSerializer.serialize(this.mapData.roads);
+
+    // 将 settlements 转换为纯对象数组（移除 Vue 的 Proxy 包装）
+    const plainSettlements = this.mapData.settlements.map(s => ({
+      x: s.x,
+      y: s.y,
+      elevation: s.elevation,
+      suitability: s.suitability,
+      islandId: s.islandId,
+      islandArea: s.islandArea,
+      roadDegree: s.roadDegree,
+      secondHopReach: s.secondHopReach,
+      cityScore: s.cityScore,
+      category: s.category,
+    }));
+
     return {
-      version: 1,
+      version: 2,
       seed: this.config.seed,
       width: this.config.width,
       height: this.config.height,
@@ -574,8 +667,8 @@ export class MapGenerator {
       createdAt: Date.now(),
       map: {
         heightmap: heightmapCopy.buffer,
-        settlements: this.mapData.settlements,
-        roads: this.mapData.roads,
+        settlements: plainSettlements,
+        roadsData: serializedRoads,
       },
       player: this.playerLayer
         ? {
@@ -609,7 +702,18 @@ export class MapGenerator {
 
     const heightmap = new Float32Array(save.map.heightmap);
     const settlements = save.map.settlements ?? [];
-    const roads = save.map.roads ?? [];
+
+    // 处理道路数据
+    let roads: RoadSegment[];
+    if (save.map.roadsData) {
+      // 从序列化数据恢复
+      roads = RoadSerializer.deserialize(save.map.roadsData);
+    } else if (save.map.roads) {
+      // 旧格式直接使用
+      roads = save.map.roads;
+    } else {
+      roads = [];
+    }
 
     // 使用已有视口直接渲染
     this.renderMap(heightmap, settlements, roads);

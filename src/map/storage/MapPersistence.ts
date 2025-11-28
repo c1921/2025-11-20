@@ -1,9 +1,10 @@
 import type { Settlement, RoadSegment } from '../core/types';
 import type { TimeSpeed } from '../../time/types';
+import type { SerializedRoadData } from './RoadSerializer';
 
 export interface MapSavePayload {
   /** 数据版本，便于将来迁移 */
-  version: 1;
+  version: 1 | 2;
   /** 地图生成种子与配置 */
   seed: number;
   width: number;
@@ -15,7 +16,10 @@ export interface MapSavePayload {
   map: {
     heightmap: ArrayBuffer;
     settlements: Settlement[];
-    roads: RoadSegment[];
+    /** 版本1：直接存储道路数组（已弃用，保留用于向后兼容） */
+    roads?: RoadSegment[];
+    /** 版本2：序列化的道路数据，避免 IndexedDB 克隆错误 */
+    roadsData?: SerializedRoadData;
   };
   /** 玩家状态（可选，未来拓展用） */
   player?: {

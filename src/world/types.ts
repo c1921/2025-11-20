@@ -1,6 +1,7 @@
 import type { GameTime } from '../time/types';
 import type { MapSavePayload } from '../map/storage/MapPersistence';
 import type { TimeSystemState } from './systems/TimeSystem';
+import type { CharacterManagerState } from './systems/CharacterTypes';
 
 /**
  * World 配置
@@ -30,8 +31,9 @@ export interface WorldSnapshot {
  * World 存档数据
  */
 export interface WorldSaveData {
-  version: 1;
+  version: 1 | 2;
   createdAt: number;
   time: TimeSystemState;
   map: MapSavePayload;
+  characters: CharacterManagerState;
 }

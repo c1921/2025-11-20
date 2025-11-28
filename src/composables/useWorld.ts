@@ -114,7 +114,7 @@ export function useWorld() {
     // 转换为 MapSaveRecord 格式
     await MapPersistence.save({
       id: 'world-save-' + saveData.createdAt,
-      version: saveData.version,
+      version: saveData.map.version, // 使用 MapSavePayload 的版本号
       seed: saveData.map.seed,
       width: saveData.map.width,
       height: saveData.map.height,
@@ -158,6 +158,11 @@ export function useWorld() {
         map: latestSave.map,
         player: latestSave.player,
         time: latestSave.time,
+      },
+      // 旧存档没有角色数据，使用空数组
+      characters: {
+        characters: [],
+        nextId: 1,
       },
     };
 

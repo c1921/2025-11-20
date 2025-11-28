@@ -7,6 +7,9 @@ export type SettlementLayerOptions = {
 
   /** 点击选择回调 */
   onClick?: (settlement: Settlement) => void;
+
+  /** 右键点击回调 */
+  onRightClick?: (settlement: Settlement, event: PIXI.FederatedPointerEvent) => void;
 };
 
 /**
@@ -117,6 +120,10 @@ export class SettlementLayer {
       hitArea.on('pointerout', () => this.handleHover(null));
       hitArea.on('pointertap', () => {
         this.options.onClick?.(settlement);
+      });
+      hitArea.on('rightclick', (event: PIXI.FederatedPointerEvent) => {
+        event.preventDefault();
+        this.options.onRightClick?.(settlement, event);
       });
 
       this.hitContainer.addChild(hitArea);

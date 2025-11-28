@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onUnmounted } from 'vue';
 import { useGameStore } from '../stores/gameStore';
 import { useWorld } from '../composables/useWorld';
 import type { World } from '../world/World';
+import type { Settlement } from '../map/core/types';
+import type { Character } from '../world/systems/CharacterTypes';
 import MenuPanel from './MenuPanel.vue';
 import SetupPanel from './SetupPanel.vue';
 import PlayingPanel from './PlayingPanel.vue';
@@ -10,6 +12,9 @@ import EmptyMapHint from './EmptyMapHint.vue';
 import TimeDisplay from './TimeDisplay.vue';
 import TravelInfo from './TravelInfo.vue';
 import WorldDebugPanel from './WorldDebugPanel.vue';
+import SettlementInfo from './SettlementInfo.vue';
+import CharacterDetail from './CharacterDetail.vue';
+import SettlementContextMenu from './SettlementContextMenu.vue';
 
 const { isMenuPhase, isSetupPhase, isPlayingPhase, goToSetup, startGame, returnToMenu } = useGameStore();
 
@@ -31,6 +36,18 @@ const isGenerating = ref(false);
 const isSaving = ref(false);
 const isLoadingSave = ref(false);
 const saveMessage = ref('');
+
+// UI 面板状态
+const selectedSettlement = ref<Settlement | null>(null);
+const selectedSettlementIndex = ref<number | null>(null);
+const selectedCharacter = ref<Character | null>(null);
+const allCharacters = computed(() => world.value?.getCharacterManager()?.getAll() || []);
+
+// 右键菜单状态
+const contextMenuVisible = ref(false);
+const contextMenuPosition = ref({ x: 0, y: 0 });
+const contextMenuSettlement = ref<Settlement | null>(null);
+const contextMenuSettlementIndex = ref<number | null>(null);
 
 // 计算属性
 const hasMap = computed(() => snapshot.value.isInitialized);
@@ -58,12 +75,80 @@ const generateMap = async () => {
       },
     });
 
+    // 设置定居点点击回调
+    setupSettlementClickHandler();
+
     console.log('✅ 地图生成完成');
   } catch (error) {
     console.error('地图生成失败:', error);
   } finally {
     isGenerating.value = false;
   }
+};
+
+// 设置定居点点击处理器
+const setupSettlementClickHandler = () => {
+  const generator = world.value?.getMapSystem()?.getGenerator();
+  if (generator) {
+    // 左键：仅显示信息面板
+    generator.onSettlementClick = (settlement, index) => {
+      selectedSettlement.value = settlement;
+      selectedSettlementIndex.value = index;
+      selectedCharacter.value = null;
+      console.log('🏠 左键点击定居点:', settlement.category, 'index:', index);
+    };
+
+    // 右键：仅显示上下文菜单，不显示信息面板
+    generator.onSettlementRightClick = (settlement, index, event) => {
+      const screenPos = event.global;
+      contextMenuPosition.value = { x: screenPos.x, y: screenPos.y };
+      contextMenuSettlement.value = settlement;
+      contextMenuSettlementIndex.value = index;
+      contextMenuVisible.value = true;
+
+      // 清空信息面板状态，确保不显示信息面板
+      selectedSettlement.value = null;
+      selectedSettlementIndex.value = null;
+      selectedCharacter.value = null;
+
+      console.log('🖱️ 右键点击定居点:', settlement.category, 'index:', index);
+    };
+  }
+};
+
+// 处理角色选择
+const handleSelectCharacter = (character: Character) => {
+  selectedCharacter.value = character;
+};
+
+// 关闭面板
+const closeSettlementInfo = () => {
+  selectedSettlement.value = null;
+  selectedSettlementIndex.value = null;
+};
+
+const closeCharacterDetail = () => {
+  selectedCharacter.value = null;
+};
+
+// 处理"移动到此处"
+const handleMoveTo = () => {
+  if (contextMenuSettlementIndex.value === null) return;
+
+  const generator = world.value?.getMapSystem()?.getGenerator();
+  if (generator) {
+    generator.moveToSettlement(contextMenuSettlementIndex.value);
+  }
+
+  // 关闭菜单
+  closeContextMenu();
+};
+
+// 关闭上下文菜单
+const closeContextMenu = () => {
+  contextMenuVisible.value = false;
+  contextMenuSettlement.value = null;
+  contextMenuSettlementIndex.value = null;
 };
 
 // 切换视图模式
@@ -159,6 +244,7 @@ const handleNewGame = () => {
 const handleLoadAndPlay = async () => {
   await loadSave();
   if (hasMap.value) {
+    setupSettlementClickHandler();
     startGame();
   }
 };
@@ -169,13 +255,35 @@ const handleReturnToMenu = () => {
   returnToMenu();
 };
 
+// 点击其他地方关闭菜单
+const handleGlobalClick = (event: MouseEvent) => {
+  if (contextMenuVisible.value) {
+    // 检查点击是否在菜单外
+    const target = event.target as HTMLElement;
+    if (!target.closest('.context-menu')) {
+      closeContextMenu();
+    }
+  }
+};
+
 // 监听游戏阶段，控制世界运行
 watch(isPlayingPhase, (playing) => {
   if (playing) {
     startWorld();
+    // 添加全局点击监听
+    setTimeout(() => {
+      document.addEventListener('click', handleGlobalClick);
+    }, 0);
   } else {
     pauseWorld();
+    // 移除全局点击监听
+    document.removeEventListener('click', handleGlobalClick);
   }
+});
+
+// 组件卸载时清理
+onUnmounted(() => {
+  document.removeEventListener('click', handleGlobalClick);
 });
 </script>
 
@@ -245,6 +353,35 @@ watch(isPlayingPhase, (playing) => {
     <div v-if="isDev && hasMap" class="debug-panel">
       <WorldDebugPanel :world="worldValue" :snapshot="snapshot" />
     </div>
+
+    <!-- 游戏阶段：定居点信息面板（中央） -->
+    <div v-if="isPlayingPhase && selectedSettlement" class="settlement-panel">
+      <SettlementInfo
+        :settlement="selectedSettlement"
+        :settlement-index="selectedSettlementIndex"
+        :characters="allCharacters"
+        @select-character="handleSelectCharacter"
+        @close="closeSettlementInfo"
+      />
+    </div>
+
+    <!-- 游戏阶段：角色详情面板（中央偏右） -->
+    <div v-if="isPlayingPhase && selectedCharacter" class="character-panel">
+      <CharacterDetail
+        :character="selectedCharacter"
+        @close="closeCharacterDetail"
+      />
+    </div>
+
+    <!-- 游戏阶段：定居点右键菜单 -->
+    <SettlementContextMenu
+      v-if="isPlayingPhase && contextMenuVisible"
+      :settlement="contextMenuSettlement"
+      :settlement-index="contextMenuSettlementIndex"
+      :position="contextMenuPosition"
+      @move-to="handleMoveTo"
+      @close="closeContextMenu"
+    />
   </div>
 </template>
 
@@ -307,5 +444,21 @@ watch(isPlayingPhase, (playing) => {
   bottom: 20px;
   right: 20px;
   z-index: 100;
+}
+
+.settlement-panel {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 200;
+}
+
+.character-panel {
+  position: absolute;
+  top: 50%;
+  left: 55%;
+  transform: translate(-50%, -50%);
+  z-index: 210;
 }
 </style>

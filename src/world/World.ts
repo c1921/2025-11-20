@@ -1,6 +1,7 @@
 import type { WorldConfig, WorldSnapshot, WorldSaveData } from './types';
 import { TimeSystem } from './systems/TimeSystem';
 import { MapSystem } from './systems/MapSystem';
+import { CharacterManager } from './systems/CharacterManager';
 
 /**
  * 游戏世界的核心状态系统
@@ -12,6 +13,7 @@ export class World {
   private readonly config: WorldConfig;
   private timeSystem: TimeSystem | null = null;
   private mapSystem: MapSystem | null = null;
+  private characterManager: CharacterManager | null = null;
 
   constructor(config: WorldConfig) {
     this.config = config;
@@ -24,9 +26,16 @@ export class World {
   async initialize(): Promise<void> {
     this.timeSystem = new TimeSystem();
     this.mapSystem = new MapSystem(this.config.mapConfig);
+    this.characterManager = new CharacterManager();
 
     await this.mapSystem.initialize();
     this.mapSystem.setTimeSystem(this.timeSystem);
+
+    // 生成角色并分布到地图上
+    const settlements = this.mapSystem.getGenerator().getMapData()?.settlements || [];
+    if (settlements.length > 0) {
+      this.characterManager.generateRandomCharacters(100, settlements.length);
+    }
 
     this.isInitialized = true;
     console.log('✅ World: 所有系统已初始化');
@@ -52,6 +61,11 @@ export class World {
 
     await this.mapSystem.loadFromSave(save.map);
     this.mapSystem.setTimeSystem(this.timeSystem);
+
+    this.characterManager = new CharacterManager();
+    if (save.characters) {
+      this.characterManager.loadState(save.characters);
+    }
 
     this.isInitialized = true;
     console.log('✅ World: 从存档加载完成');
@@ -84,6 +98,7 @@ export class World {
     this.mapSystem?.destroy();
     this.timeSystem = null;
     this.mapSystem = null;
+    this.characterManager = null;
     this.isInitialized = false;
     this.isRunning = false;
     console.log('✅ World: 已销毁');
@@ -113,6 +128,13 @@ export class World {
   }
 
   /**
+   * 获取角色管理器（供 UI 访问）
+   */
+  getCharacterManager(): CharacterManager | null {
+    return this.characterManager;
+  }
+
+  /**
    * 获取配置信息
    */
   getConfig(): WorldConfig {
@@ -135,17 +157,19 @@ export class World {
    * 生成存档数据
    */
   createSaveData(): WorldSaveData {
-    if (!this.isInitialized || !this.timeSystem || !this.mapSystem) {
+    if (!this.isInitialized || !this.timeSystem || !this.mapSystem || !this.characterManager) {
       throw new Error('World 未初始化，无法创建存档');
     }
 
     const mapSaveData = this.mapSystem.createSaveData();
+    const characterData = this.characterManager.getState();
 
     return {
       version: 1,
       createdAt: Date.now(),
       time: this.timeSystem.getState(),
       map: mapSaveData,
+      characters: characterData,
     };
   }
 }
