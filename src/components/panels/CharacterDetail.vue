@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Character } from '../world/systems/CharacterTypes';
+import type { Character } from '../../world/systems/CharacterTypes';
 
 interface Props {
   character: Character | null;

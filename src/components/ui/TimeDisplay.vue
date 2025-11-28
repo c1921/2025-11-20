@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import type { World } from '../world/World';
-import { TimeSpeed } from '../time/types';
+import type { World } from '../../world/World';
+import { TimeSpeed } from '../../time/types';
 
 const props = defineProps<{
   world: World | null;

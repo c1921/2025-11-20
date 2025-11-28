@@ -5,23 +5,24 @@ import { useWorld } from '../composables/useWorld';
 import type { World } from '../world/World';
 import type { Settlement } from '../map/core/types';
 import type { Character } from '../world/systems/CharacterTypes';
-import MenuPanel from './MenuPanel.vue';
-import SetupPanel from './SetupPanel.vue';
-import PlayingPanel from './PlayingPanel.vue';
-import EmptyMapHint from './EmptyMapHint.vue';
-import TimeDisplay from './TimeDisplay.vue';
-import TravelInfo from './TravelInfo.vue';
-import WorldDebugPanel from './WorldDebugPanel.vue';
-import SettlementInfo from './SettlementInfo.vue';
-import CharacterDetail from './CharacterDetail.vue';
-import SettlementContextMenu from './SettlementContextMenu.vue';
+import MapContainer from '../components/layout/MapContainer.vue';
+import MenuPanel from '../components/panels/MenuPanel.vue';
+import SetupPanel from '../components/panels/SetupPanel.vue';
+import PlayingPanel from '../components/panels/PlayingPanel.vue';
+import SettlementInfo from '../components/panels/SettlementInfo.vue';
+import CharacterDetail from '../components/panels/CharacterDetail.vue';
+import WorldDebugPanel from '../components/panels/WorldDebugPanel.vue';
+import TimeDisplay from '../components/ui/TimeDisplay.vue';
+import TravelInfo from '../components/ui/TravelInfo.vue';
+import EmptyMapHint from '../components/ui/EmptyMapHint.vue';
+import SettlementContextMenu from '../components/overlays/SettlementContextMenu.vue';
 
 const { isMenuPhase, isSetupPhase, isPlayingPhase, goToSetup, startGame, returnToMenu } = useGameStore();
 
 const { world, snapshot, createWorld, startWorld, pauseWorld, destroyWorld, saveWorld, loadLatestSave } = useWorld();
 
 // 地图容器引用
-const mapContainer = ref<HTMLDivElement | null>(null);
+const mapContainerRef = ref<InstanceType<typeof MapContainer> | null>(null);
 
 // 提供给模板使用的 world 值
 const worldValue = computed(() => world.value as World | null);
@@ -53,9 +54,15 @@ const contextMenuSettlementIndex = ref<number | null>(null);
 const hasMap = computed(() => snapshot.value.isInitialized);
 const isDev = import.meta.env.DEV;
 
+// 获取地图容器元素
+const getMapContainerElement = () => {
+  return mapContainerRef.value?.getContainerElement() ?? null;
+};
+
 // 生成地图
 const generateMap = async () => {
-  if (!mapContainer.value) {
+  const container = getMapContainerElement();
+  if (!container) {
     console.error('地图容器未准备好');
     return;
   }
@@ -66,7 +73,7 @@ const generateMap = async () => {
 
     await createWorld({
       mapConfig: {
-        container: mapContainer.value,
+        container,
         width: 1024,
         height: 1024,
         seed,
@@ -74,9 +81,6 @@ const generateMap = async () => {
         enableErosion: erosionEnabled.value,
       },
     });
-
-    // 设置定居点点击回调
-    setupSettlementClickHandler();
 
     console.log('✅ 地图生成完成');
   } catch (error) {
@@ -86,34 +90,28 @@ const generateMap = async () => {
   }
 };
 
-// 设置定居点点击处理器
-const setupSettlementClickHandler = () => {
-  const generator = world.value?.getMapSystem()?.getGenerator();
-  if (generator) {
-    // 左键：仅显示信息面板
-    generator.onSettlementClick = (settlement, index) => {
-      selectedSettlement.value = settlement;
-      selectedSettlementIndex.value = index;
-      selectedCharacter.value = null;
-      console.log('🏠 左键点击定居点:', settlement.category, 'index:', index);
-    };
+// 处理定居点点击
+const handleSettlementClick = (settlement: Settlement, index: number) => {
+  selectedSettlement.value = settlement;
+  selectedSettlementIndex.value = index;
+  selectedCharacter.value = null;
+  console.log('🏠 左键点击定居点:', settlement.category, 'index:', index);
+};
 
-    // 右键：仅显示上下文菜单，不显示信息面板
-    generator.onSettlementRightClick = (settlement, index, event) => {
-      const screenPos = event.global;
-      contextMenuPosition.value = { x: screenPos.x, y: screenPos.y };
-      contextMenuSettlement.value = settlement;
-      contextMenuSettlementIndex.value = index;
-      contextMenuVisible.value = true;
+// 处理定居点右键点击
+const handleSettlementRightClick = (settlement: Settlement, index: number, event: any) => {
+  const screenPos = event.global;
+  contextMenuPosition.value = { x: screenPos.x, y: screenPos.y };
+  contextMenuSettlement.value = settlement;
+  contextMenuSettlementIndex.value = index;
+  contextMenuVisible.value = true;
 
-      // 清空信息面板状态，确保不显示信息面板
-      selectedSettlement.value = null;
-      selectedSettlementIndex.value = null;
-      selectedCharacter.value = null;
+  // 清空信息面板状态，确保不显示信息面板
+  selectedSettlement.value = null;
+  selectedSettlementIndex.value = null;
+  selectedCharacter.value = null;
 
-      console.log('🖱️ 右键点击定居点:', settlement.category, 'index:', index);
-    };
-  }
+  console.log('🖱️ 右键点击定居点:', settlement.category, 'index:', index);
 };
 
 // 处理角色选择
@@ -186,7 +184,8 @@ const saveCurrentMap = async () => {
 
 // 加载存档
 const loadSave = async () => {
-  if (!mapContainer.value) {
+  const container = getMapContainerElement();
+  if (!container) {
     console.error('地图容器未准备好');
     return;
   }
@@ -195,7 +194,7 @@ const loadSave = async () => {
   saveMessage.value = '';
 
   try {
-    const success = await loadLatestSave(mapContainer.value);
+    const success = await loadLatestSave(container);
     if (success) {
       saveMessage.value = '✅ 存档加载成功！';
       setTimeout(() => {
@@ -244,7 +243,6 @@ const handleNewGame = () => {
 const handleLoadAndPlay = async () => {
   await loadSave();
   if (hasMap.value) {
-    setupSettlementClickHandler();
     startGame();
   }
 };
@@ -288,9 +286,14 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="map-wrapper">
-    <!-- Full-screen canvas container -->
-    <div ref="mapContainer" class="map-container"></div>
+  <div class="game-view">
+    <!-- 地图容器（始终渲染，提供 Canvas DOM） -->
+    <MapContainer
+      ref="mapContainerRef"
+      :world="worldValue"
+      @settlement-click="handleSettlementClick"
+      @settlement-right-click="handleSettlementRightClick"
+    />
 
     <!-- 主菜单阶段：居中显示 -->
     <div v-if="isMenuPhase" class="menu-state">
@@ -386,16 +389,11 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-.map-wrapper {
+.game-view {
   position: fixed;
   inset: 0;
   overflow: hidden;
   background: #0a0a0f;
-}
-
-.map-container {
-  position: absolute;
-  inset: 0;
 }
 
 .map-controls {

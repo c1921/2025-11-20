@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import type { World } from '../world/World';
-import type { WorldSnapshot } from '../world/types';
+import type { World } from '../../world/World';
+import type { WorldSnapshot } from '../../world/types';
 
 const props = defineProps<{
   world: World | null;

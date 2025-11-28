@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import type { Settlement } from '../map/core/types';
-import type { Character } from '../world/systems/CharacterTypes';
+import type { Settlement } from '../../map/core/types';
+import type { Character } from '../../world/systems/CharacterTypes';
 
 interface Props {
   settlement: Settlement | null;

@@ -1,33 +1,18 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted } from 'vue';
-import MapComponent from './components/Map.vue';
+import GameView from './views/GameView.vue'
 
-// 全局禁用默认右键菜单
-const handleContextMenu = (e: MouseEvent) => {
-  e.preventDefault();
-};
-
-onMounted(() => {
-  document.addEventListener('contextmenu', handleContextMenu);
-});
-
-onUnmounted(() => {
-  document.removeEventListener('contextmenu', handleContextMenu);
-});
+// 禁用全局右键菜单
+document.addEventListener('contextmenu', (e) => {
+  e.preventDefault()
+})
 </script>
 
 <template>
-  <MapComponent />
+  <GameView />
 </template>
 
 <style>
-/* Global styles to remove margins */
-body {
-  margin: 0;
-  padding: 0;
-  overflow: hidden;
-}
-
+body,
 #app {
   margin: 0;
   padding: 0;

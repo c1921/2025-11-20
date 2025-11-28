@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Settlement } from '../map/core/types';
+import type { Settlement } from '../../map/core/types';
 
 interface Props {
   settlement: Settlement | null;

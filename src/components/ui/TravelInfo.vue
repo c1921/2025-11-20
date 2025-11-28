@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue';
-import type { PlayerLayer } from '../map/render/PlayerLayer';
+import type { PlayerLayer } from '../../map/render/PlayerLayer';
 
 const props = defineProps<{
   playerLayer: PlayerLayer | null;
