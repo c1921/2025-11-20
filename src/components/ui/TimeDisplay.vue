@@ -38,52 +38,79 @@ function setTimeSpeed(speed: TimeSpeed): void {
 </script>
 
 <template>
-  <div class="card bg-base-300/90 backdrop-blur-sm shadow-xl">
-    <div class="card-body p-4">
-      <h3 class="card-title text-sm text-primary">📅 游戏时间</h3>
+  <div class="time-display w-110">
+    <!-- 日期显示 -->
+    <div class="time-info">
+      <span class="time-icon">📅</span>
+      <span class="time-date">{{ formattedDate }}</span>
+      <span class="time-total">({{ totalDays }} 天)</span>
+    </div>
 
-      <!-- 日期显示 -->
-      <div class="bg-base-100/50 rounded-lg p-3 space-y-1">
-        <div class="text-lg font-bold text-center">
-          {{ formattedDate }}
-        </div>
-        <div class="text-xs text-center text-base-content/50">
-          总计 {{ totalDays }} 天
-        </div>
-      </div>
+    <!-- 分隔线 -->
+    <div class="time-divider"></div>
 
-      <!-- 时间控制 -->
-      <div class="divider my-2">时间控制</div>
-
-      <!-- 当前速度显示 -->
-      <div class="flex items-center justify-between mb-2">
-        <span class="text-xs text-base-content/70">当前速度:</span>
-        <span class="text-sm font-semibold">
-          {{ getSpeedLabel(timeSpeed) }}
-        </span>
-      </div>
-
-      <!-- 速度选择按钮 -->
-      <div class="grid grid-cols-2 gap-2">
-        <button
-          v-for="option in speedOptions"
-          :key="option.value"
-          class="btn btn-sm"
-          :class="{
-            'btn-primary': timeSpeed === option.value,
-            'btn-ghost': timeSpeed !== option.value
-          }"
-          @click="setTimeSpeed(option.value)"
-        >
-          {{ option.icon }}
-        </button>
-      </div>
+    <!-- 速度控制按钮 -->
+    <div class="time-controls">
+      <button
+        v-for="option in speedOptions"
+        :key="option.value"
+        class="btn btn-sm btn-square"
+        :class="{
+          'btn-primary': timeSpeed === option.value,
+          'btn-ghost': timeSpeed !== option.value
+        }"
+        :title="option.label"
+        @click="setTimeSpeed(option.value)"
+      >
+        {{ option.icon }}
+      </button>
     </div>
   </div>
 </template>
 
 <style scoped>
-.card {
-  min-width: 16rem;
+.time-display {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.5rem 1rem;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.time-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.time-icon {
+  font-size: 1.25rem;
+}
+
+.time-date {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.95);
+  white-space: nowrap;
+}
+
+.time-total {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.6);
+  white-space: nowrap;
+}
+
+.time-divider {
+  width: 1px;
+  height: 1.5rem;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.time-controls {
+  display: flex;
+  gap: 0.25rem;
+  align-items: center;
 }
 </style>

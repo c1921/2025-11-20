@@ -8,13 +8,14 @@ import type { Character } from '../world/systems/CharacterTypes';
 import MapContainer from '../components/layout/MapContainer.vue';
 import MenuPanel from '../components/panels/MenuPanel.vue';
 import SetupPanel from '../components/panels/SetupPanel.vue';
-import PlayingPanel from '../components/panels/PlayingPanel.vue';
 import SettlementInfo from '../components/panels/SettlementInfo.vue';
 import CharacterDetail from '../components/panels/CharacterDetail.vue';
 import WorldDebugPanel from '../components/panels/WorldDebugPanel.vue';
-import TimeDisplay from '../components/ui/TimeDisplay.vue';
 import TravelInfo from '../components/ui/TravelInfo.vue';
 import EmptyMapHint from '../components/ui/EmptyMapHint.vue';
+import TopBar from '../components/ui/TopBar.vue';
+import BottomBar from '../components/ui/BottomBar.vue';
+import GameDrawer from '../components/ui/GameDrawer.vue';
 import SettlementContextMenu from '../components/overlays/SettlementContextMenu.vue';
 
 const { isMenuPhase, isSetupPhase, isPlayingPhase, goToSetup, startGame, returnToMenu } = useGameStore();
@@ -272,6 +273,12 @@ watch(isPlayingPhase, (playing) => {
     setTimeout(() => {
       document.addEventListener('click', handleGlobalClick);
     }, 0);
+    // 重新初始化 overlay 组件（只初始化新渲染的抽屉，而不是整个页面）
+    setTimeout(() => {
+      if (window.HSStaticMethods) {
+        window.HSStaticMethods.autoInit(['overlay']);
+      }
+    }, 100);
   } else {
     pauseWorld();
     // 移除全局点击监听
@@ -329,23 +336,21 @@ onUnmounted(() => {
       <EmptyMapHint />
     </div>
 
-    <!-- 游戏阶段：控制面板在角落 -->
-    <div v-if="isPlayingPhase" class="map-controls">
-      <PlayingPanel
-        :is-heightmap-mode="isHeightmapMode"
-        :is-generating="isGenerating"
-        :is-saving="isSaving"
-        :save-message="saveMessage"
-        @toggle-view="toggleViewMode"
-        @save="saveCurrentMap"
-        @return-menu="handleReturnToMenu"
-      />
-    </div>
+    <!-- 游戏阶段：顶部栏 -->
+    <TopBar v-if="isPlayingPhase" :world="worldValue" />
 
-    <!-- 游戏阶段：时间显示在右上角 -->
-    <div v-if="isPlayingPhase" class="time-panel">
-      <TimeDisplay :world="worldValue" />
-    </div>
+    <!-- 游戏阶段：底部栏（包含时间控制和游戏控制） -->
+    <BottomBar
+      v-if="isPlayingPhase"
+      :world="worldValue"
+      :is-heightmap-mode="isHeightmapMode"
+      :is-generating="isGenerating"
+      :is-saving="isSaving"
+      :save-message="saveMessage"
+      @toggle-view="toggleViewMode"
+      @save="saveCurrentMap"
+      @return-menu="handleReturnToMenu"
+    />
 
     <!-- 游戏阶段：旅行信息显示在左下角 -->
     <div v-if="isPlayingPhase" class="travel-panel">
@@ -385,6 +390,9 @@ onUnmounted(() => {
       @move-to="handleMoveTo"
       @close="closeContextMenu"
     />
+
+    <!-- 游戏抽屉（设置面板） -->
+    <GameDrawer v-if="isPlayingPhase" :world="worldValue" />
   </div>
 </template>
 
@@ -423,23 +431,16 @@ onUnmounted(() => {
   background: #0a0a0f;
 }
 
-.time-panel {
-  position: absolute;
-  top: 20px;
-  right: 20px;
-  z-index: 100;
-}
-
 .travel-panel {
   position: absolute;
-  bottom: 20px;
+  bottom: 80px;
   left: 20px;
   z-index: 100;
 }
 
 .debug-panel {
   position: absolute;
-  bottom: 20px;
+  bottom: 80px;
   right: 20px;
   z-index: 100;
 }
