@@ -1,6 +1,7 @@
 import type { Settlement, RoadSegment } from '../core/types';
 import type { TimeSpeed } from '../../time/types';
 import type { SerializedRoadData } from './RoadSerializer';
+import type { CharacterManagerState } from '../../world/systems/CharacterTypes';
 
 export interface MapSavePayload {
   /** 数据版本，便于将来迁移 */
@@ -32,6 +33,8 @@ export interface MapSavePayload {
     totalDays: number;
     timeSpeed: TimeSpeed;
   };
+  /** 角色系统状态 */
+  characters?: CharacterManagerState;
 }
 
 export interface MapSaveRecord extends MapSavePayload {

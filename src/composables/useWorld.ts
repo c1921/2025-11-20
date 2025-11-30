@@ -111,8 +111,14 @@ export function useWorld() {
 
     const saveData = worldRef.value.createSaveData();
 
+    // 调试：检查角色数据
+    console.log('💾 准备保存角色数据:', saveData.characters);
+
+    // 深拷贝角色数据，确保没有引用问题
+    const charactersClone = JSON.parse(JSON.stringify(saveData.characters));
+
     // 转换为 MapSaveRecord 格式
-    await MapPersistence.save({
+    const recordToSave = {
       id: 'world-save-' + saveData.createdAt,
       version: saveData.map.version, // 使用 MapSavePayload 的版本号
       seed: saveData.map.seed,
@@ -124,7 +130,10 @@ export function useWorld() {
       map: saveData.map.map,
       player: saveData.map.player,
       time: saveData.time,
-    });
+      characters: charactersClone, // 保存角色数据（深拷贝）
+    };
+
+    await MapPersistence.save(recordToSave);
 
     console.log('💾 世界已保存');
   }
@@ -159,8 +168,8 @@ export function useWorld() {
         player: latestSave.player,
         time: latestSave.time,
       },
-      // 旧存档没有角色数据，使用空数组
-      characters: {
+      // 从存档读取角色数据，如果没有则使用空数组（兼容旧存档）
+      characters: latestSave.characters ?? {
         characters: [],
         nextId: 1,
       },
