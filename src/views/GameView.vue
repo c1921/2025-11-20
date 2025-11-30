@@ -8,8 +8,6 @@ import type { Character } from '../world/systems/CharacterTypes';
 import MapContainer from '../components/layout/MapContainer.vue';
 import MenuPanel from '../components/panels/MenuPanel.vue';
 import SetupPanel from '../components/panels/SetupPanel.vue';
-import SettlementInfo from '../components/panels/SettlementInfo.vue';
-import CharacterDetail from '../components/panels/CharacterDetail.vue';
 import WorldDebugPanel from '../components/panels/WorldDebugPanel.vue';
 import TravelInfo from '../components/ui/TravelInfo.vue';
 import EmptyMapHint from '../components/ui/EmptyMapHint.vue';
@@ -91,12 +89,25 @@ const generateMap = async () => {
   }
 };
 
-// 处理定居点点击
+// 处理定居点点击 - 打开抽屉显示定居点信息
 const handleSettlementClick = (settlement: Settlement, index: number) => {
   selectedSettlement.value = settlement;
   selectedSettlementIndex.value = index;
   selectedCharacter.value = null;
   console.log('🏠 左键点击定居点:', settlement.category, 'index:', index);
+
+  // 检查抽屉是否已打开，如果没打开才触发打开
+  setTimeout(() => {
+    const drawer = document.querySelector('#game-drawer');
+    const isDrawerOpen = drawer?.classList.contains('open') || drawer?.classList.contains('overlay-open');
+
+    if (!isDrawerOpen) {
+      const drawerTrigger = document.querySelector('[data-overlay="#game-drawer"]');
+      if (drawerTrigger) {
+        (drawerTrigger as HTMLElement).click();
+      }
+    }
+  }, 0);
 };
 
 // 处理定居点右键点击
@@ -118,15 +129,22 @@ const handleSettlementRightClick = (settlement: Settlement, index: number, event
 // 处理角色选择
 const handleSelectCharacter = (character: Character) => {
   selectedCharacter.value = character;
+  // 角色选择时确保抽屉已打开
+  setTimeout(() => {
+    const drawer = document.querySelector('#game-drawer');
+    const isDrawerOpen = drawer?.classList.contains('open') || drawer?.classList.contains('overlay-open');
+
+    if (!isDrawerOpen) {
+      const drawerTrigger = document.querySelector('[data-overlay="#game-drawer"]');
+      if (drawerTrigger) {
+        (drawerTrigger as HTMLElement).click();
+      }
+    }
+  }, 0);
 };
 
-// 关闭面板
-const closeSettlementInfo = () => {
-  selectedSettlement.value = null;
-  selectedSettlementIndex.value = null;
-};
-
-const closeCharacterDetail = () => {
+// 关闭角色详情（返回定居点）
+const handleCloseCharacter = () => {
   selectedCharacter.value = null;
 };
 
@@ -362,25 +380,6 @@ onUnmounted(() => {
       <WorldDebugPanel :world="worldValue" :snapshot="snapshot" />
     </div>
 
-    <!-- 游戏阶段：定居点信息面板（中央） -->
-    <div v-if="isPlayingPhase && selectedSettlement" class="settlement-panel">
-      <SettlementInfo
-        :settlement="selectedSettlement"
-        :settlement-index="selectedSettlementIndex"
-        :characters="allCharacters"
-        @select-character="handleSelectCharacter"
-        @close="closeSettlementInfo"
-      />
-    </div>
-
-    <!-- 游戏阶段：角色详情面板（中央偏右） -->
-    <div v-if="isPlayingPhase && selectedCharacter" class="character-panel">
-      <CharacterDetail
-        :character="selectedCharacter"
-        @close="closeCharacterDetail"
-      />
-    </div>
-
     <!-- 游戏阶段：定居点右键菜单 -->
     <SettlementContextMenu
       v-if="isPlayingPhase && contextMenuVisible"
@@ -391,8 +390,17 @@ onUnmounted(() => {
       @close="closeContextMenu"
     />
 
-    <!-- 游戏抽屉（设置面板） -->
-    <GameDrawer v-if="isPlayingPhase" :world="worldValue" />
+    <!-- 游戏抽屉（定居点信息/角色详情/游戏设置） -->
+    <GameDrawer
+      v-if="isPlayingPhase"
+      :world="worldValue"
+      :settlement="selectedSettlement"
+      :settlement-index="selectedSettlementIndex"
+      :characters="allCharacters"
+      :selected-character="selectedCharacter"
+      @select-character="handleSelectCharacter"
+      @close-character="handleCloseCharacter"
+    />
   </div>
 </template>
 
@@ -443,21 +451,5 @@ onUnmounted(() => {
   bottom: 80px;
   right: 20px;
   z-index: 100;
-}
-
-.settlement-panel {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 200;
-}
-
-.character-panel {
-  position: absolute;
-  top: 50%;
-  left: 55%;
-  transform: translate(-50%, -50%);
-  z-index: 210;
 }
 </style>

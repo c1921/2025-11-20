@@ -35,11 +35,17 @@ const props = defineProps<{
         </div>
       </div>
 
-      <!-- 右侧：其他信息（占位） -->
-      <div class="flex-1 flex items-center gap-4">
-        <div class="text-sm text-base-content/70">
-          <!-- 预留给其他信息 -->
-        </div>
+      <!-- 右侧：游戏信息按钮 -->
+      <div class="flex-1 flex items-center justify-end gap-4">
+        <button
+          type="button"
+          class="btn btn-soft btn-secondary btn-sm"
+          data-overlay="#game-drawer"
+          aria-label="打开游戏信息"
+        >
+          <span class="icon-[tabler--info-circle] size-4"></span>
+          <span class="hidden sm:inline">游戏信息</span>
+        </button>
       </div>
     </div>
   </div>
